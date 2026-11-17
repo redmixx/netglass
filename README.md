@@ -21,9 +21,12 @@ It pings your LAN, watches TCP services, Tailscale peers and anything you point 
 
 ## Requirements
 
-- Python 3.9+ (stdlib only)
-- macOS or Linux; `ping`, `arp` are used for discovery
-- optional: `tailscale` binary, Home Assistant device registry, Moonraker, nmap's `nmap-mac-prefixes` for vendor lookup
+- Python 3.9+ (stdlib only), on macOS, Linux or Windows
+- discovery uses `ping` plus: `arp`/`ip neigh` (macOS/Linux), `arp -a` (Windows)
+- desktop notifications: osascript (macOS), notify-send (Linux), balloon tip via PowerShell (Windows); or Telegram/webhook anywhere
+- optional: `tailscale` binary, Home Assistant device registry, Moonraker, avahi-resolve (Linux mDNS), nmap's `nmap-mac-prefixes` for vendor lookup
+
+CI runs the parser and config test suite on Ubuntu, Windows and macOS (Python 3.9/3.12) via GitHub Actions.
 
 ## Quick start
 
@@ -54,6 +57,12 @@ macOS, user agent (`~/Library/LaunchAgents/pl.netglass.netglass.plist`):
 `launchctl load ~/Library/LaunchAgents/pl.netglass.netglass.plist`
 
 Linux: `ExecStart=/usr/bin/python3 /opt/netglass/server.py` in a user unit, `Restart=always`.
+
+Windows: run `python server.py` at logon via Task Scheduler:
+
+```powershell
+schtasks /create /tn netglass /tr "python C:\netglass\server.py" /sc onlogon /ru $env:USERNAME
+```
 
 ### Exposing it safely
 

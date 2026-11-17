@@ -6,7 +6,7 @@ Listens on 127.0.0.1:PORT from the config; expose remotely via Tailscale Serve, 
 
 Files created next to the config: status.json, history.jsonl, state.json, notes.json, assignments.json.
 """
-import ipaddress, json, os, re, socket, subprocess, sys, threading, time
+import ipaddress, json, os, re, shutil, socket, subprocess, sys, threading, time, traceback
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -95,15 +95,70 @@ def ha_names():
         pass
     return _ha_cache["data"]
 
+def _ping_cmd(ip, wait_ms):
+    if sys.platform == "win32":
+        return ["ping", "-n", "1", "-w", str(max(100, wait_ms)), ip]
+    if sys.platform == "darwin":
+        return ["ping", "-c1", "-W", str(wait_ms), ip]
+    return ["ping", "-c1", "-W", str(max(1, round(wait_ms / 1000))), ip]  # linux: -W is seconds
+
+
+def _parse_ping(out):
+    m = re.search(r"=([\d.]+)\s*/?\s?ms", out) or re.search(r"time=([\d.]+)", out)
+    if m:
+        return float(m.group(1))
+    if re.search(r"<1ms|<1 ms", out):
+        return 0.4
+    return None
+
+
 def ping(ip, wait_ms=700):
     try:
-        r = subprocess.run(["ping", "-c1", "-W", str(wait_ms), ip], capture_output=True, text=True, timeout=4)
+        r = subprocess.run(_ping_cmd(ip, wait_ms), capture_output=True, text=True,
+                           timeout=max(4, wait_ms / 1000 + 3))
     except Exception:
         return None
     if r.returncode != 0:
         return None
-    m = re.search(r"time=([\d.]+) ms", r.stdout)
-    return float(m.group(1)) if m else 0.0
+    return _parse_ping(r.stdout)
+
+
+def _arp_cmd():
+    if sys.platform == "win32":
+        return ["arp", "-a"]
+    if sys.platform == "darwin":
+        return ["arp", "-an"]
+    if shutil.which("ip"):
+        return ["ip", "neigh"]
+    return ["arp", "-an"]
+
+
+def _parse_arp(out):
+    """Return {ip: zero-padded mac} from linux `ip neigh`, linux/mac `arp` or windows `arp -a` output."""
+    res = {}
+    for line in out.splitlines():
+        # windows: 192.168.1.10   aa-bb-cc-dd-ee-ff   dynamic
+        m = re.search(r"(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-fA-F-]{17})\s", line)
+        # linux ip neigh: 192.168.1.10 dev eth0 lladdr aa:... REACHABLE
+        if not m:
+            m = re.search(r"(\d{1,3}(?:\.\d{1,3}){3}).*?lladdr\s+([0-9a-f:]{11,17})", line)
+        # linux/mac arp: ? (192.168.1.10) at aa:... on eth0 / 192.168.1.10 ether aa:... eth0
+        if not m:
+            m = re.search(r"\((\d{1,3}(?:\.\d{1,3}){3})\)\s+at\s+([0-9a-f:]{11,17})", line) or \
+                re.search(r"(\d{1,3}(?:\.\d{1,3}){3})\s+ether\s+([0-9a-f:]{11,17})", line)
+        if m:
+            mac = m.group(2).replace("-", ":").lower()
+            res[m.group(1)] = ":".join(part.zfill(2) for part in mac.split(":"))
+    return res
+
+
+def arp_table():
+    try:
+        out = subprocess.run(_arp_cmd(), capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return {}
+    raw = _parse_arp(out)
+    return {ip: mac for ip, mac in raw.items() if any(ipaddress.ip_address(ip) in c for c in LAN_CIDRS)}
 
 def tcp(host, port, timeout=3):
     try:
@@ -170,21 +225,20 @@ def lan_hosts():
         hosts += [str(h) for h in net.hosts()]
     return hosts
 
-def arp_table():
-    pat = "|".join("192\\.168\\.\\d+\\.\\d+" for _ in []) or r"(\d{1,3}\.){3}\d{1,3}"
-    out = subprocess.run(["arp", "-an"], capture_output=True, text=True, timeout=10).stdout
-    table, cidrs = {}, [str(c) for c in LAN_CIDRS]
-    for m in re.finditer(r"\((%s)\) at ([0-9a-f:]{11,17}) on" % pat, out):
-        ip = m.group(1)
-        if any(ipaddress.ip_address(ip) in c for c in LAN_CIDRS):
-            table[ip] = norm_mac(m.group(2))
-    return table
-
 def mdns_name(ip):
+    """Best effort reverse name. None when nothing resolves quickly."""
     try:
-        out = subprocess.run(["dscacheutil", "-q", "host", "-a", "ip", ip], capture_output=True, text=True, timeout=4).stdout if sys.platform == "darwin" else ""
-        m = re.search(r"hname:\s*(\S+)", out)
-        return m.group(1) if m else None
+        if sys.platform == "darwin":
+            out = subprocess.run(["dscacheutil", "-q", "host", "-a", "ip", ip], capture_output=True, text=True, timeout=4).stdout
+            m = re.search(r"hname:\s*(\S+)", out)
+            if m:
+                return m.group(1)
+        elif sys.platform != "win32" and shutil.which("avahi-resolve"):
+            out = subprocess.run(["avahi-resolve", "-a", ip], capture_output=True, text=True, timeout=4).stdout
+            m = re.search(r"\S+\s+(\S+)", out)
+            if m and "failed" not in out.lower():
+                return m.group(1)
+        return socket.getfqdn(ip) if socket.gethostbyaddr(ip)[0] else None
     except Exception:
         return None
 
@@ -270,15 +324,32 @@ def state_at(hours):
     return best
 
 # ---------- alerting ----------
+def _desktop_notify(msg):
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["osascript", "-e",
+                            'display notification "%s" with title "netglass" sound name "Ping"' % msg],
+                           timeout=10, check=False)
+        elif sys.platform == "win32":
+            scr = ("Add-Type -AssemblyName System.Windows.Forms;"
+                   "Add-Type -AssemblyName System.Drawing;"
+                   "$n=New-Object System.Windows.Forms.NotifyIcon;"
+                   "$n.Icon=[System.Drawing.SystemIcons]::Warning;$n.Visible=$true;"
+                   "$n.ShowBalloonTip(5000,'netglass','%s','Warning');Start-Sleep 6;$n.Dispose()" % msg.replace("'", "''"))
+            subprocess.run(["powershell", "-NoProfile", "-Command", scr], timeout=15, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            if shutil.which("notify-send"):
+                subprocess.run(["notify-send", "netglass", msg], timeout=10, check=False)
+    except Exception:
+        pass
+
+
 def alert(msg):
     print("alert:", msg, flush=True)
-    if CFG.get("alerting", {}).get("macos_notifications", True) and sys.platform == "darwin":
-        def run():
-            try:
-                subprocess.run(["osascript", "-e", 'display notification "%s" with title "netglass" sound name "Ping"' % msg], timeout=10, check=False)
-            except Exception:
-                pass
-        threading.Thread(target=run, daemon=True).start()
+    al = CFG.get("alerting", {})
+    if al.get("desktop_notifications", al.get("macos_notifications", True)):
+        threading.Thread(target=_desktop_notify, args=(msg,), daemon=True).start()
     cfg = CFG.get("alerting", {})
     def push():
         try:
@@ -352,7 +423,8 @@ def collect():
             if vend[dev]:
                 saved_vendor[dev] = vend[dev]
         else:
-            is_new = state.get("booted") and now - first.setdefault(mac, now) < 2 * INTERVAL_S
+            first.setdefault(mac, now)
+            is_new = state.get("booted") and now - first[mac] < 2 * INTERVAL_S
             v = vendor_of(mac)
             if is_new:
                 alert("New device on the network: %s%s" % (ip, (" (%s)" % v) if v else ""))
@@ -434,6 +506,7 @@ def collector_loop():
                 collect()
         except Exception as exc:
             print("collect failed:", repr(exc), flush=True)
+            traceback.print_exc()
         time.sleep(max(10, INTERVAL_S - (time.time() - t0)))
 
 def refresh_now():
