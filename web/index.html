@@ -1,0 +1,1059 @@
+<title>My network map</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#08090a">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one topology canvas with four network zones, a detail panel beside it (below on phones), device index underneath. */
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --zone:#eef1f5; --line:#e4e8ee; --fg:#191d24; --muted:#6b7684;
+  --lan:#0c8f86; --ai:#c2487f; --direct:#b9770a; --ts:#6a55d6; --zte:#4a8527; --wan:#52708f; --warn:#b9770a;
+  --node:#ffffff; --node-stroke:#aab4c2; --ok:#2a8a55; --bad:#c23b3b;
+  --s-bg1:#e6e9ee; --s-bg2:#f8f9fb;
+  --f-display:"Space Grotesk","Inter",system-ui,sans-serif; --f-body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#08090a; --surface:#101114; --zone:#121317; --line:rgba(255,255,255,.09); --fg:#f7f8f8; --muted:#8a8f98;
+  --lan:#35c9bd; --ai:#f07fb0; --direct:#f0b545; --ts:#8b7dff; --zte:#9bd46a; --wan:#8fb0d1; --warn:#f0b545;
+  --node:#1a1c20; --node-stroke:#34383f; --ok:#3fbf7f; --bad:#ff7b7b; --s-bg1:#0e0f12; --s-bg2:#17181c; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#08090a; --surface:#101114; --zone:#121317; --line:rgba(255,255,255,.09); --fg:#f7f8f8; --muted:#8a8f98;
+  --lan:#35c9bd; --ai:#f07fb0; --direct:#f0b545; --ts:#8b7dff; --zte:#9bd46a; --wan:#8fb0d1; --warn:#f0b545;
+  --node:#1a1c20; --node-stroke:#34383f; --ok:#3fbf7f; --bad:#ff7b7b; --s-bg1:#0e0f12; --s-bg2:#17181c; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 16px}
+h1{font-family:var(--f-display);font-weight:600;font-size:1.7rem;margin:0;letter-spacing:-.01em}
+.stamp{color:var(--muted);font-size:.85rem}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bar .lbl{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+button.chip{font:500 .85rem var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+button.chip:hover{border-color:var(--muted)}
+button.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+button.chip:focus-visible,.node:focus-visible,.idx button:focus-visible{outline:2px solid var(--ts);outline-offset:2px}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow-x:auto;min-width:0}
+svg#map{display:block;width:100%;min-width:820px;height:auto;font-family:var(--f-body)}
+.zone{fill:var(--zone);stroke:var(--line)}
+.zlabel{font:600 11px var(--f-body);letter-spacing:.1em;text-transform:uppercase;fill:var(--muted)}
+.zsub{font:400 10.5px var(--f-mono);fill:var(--muted)}
+.link{fill:none;stroke-width:1.6;stroke-linecap:round;opacity:.55;transition:opacity .2s,stroke-width .2s}
+.t-lan{stroke:var(--lan)} .t-roce{stroke:var(--ai);stroke-width:3} .t-direct{stroke:var(--direct);stroke-width:2.4}
+.t-ts{stroke:var(--ts);stroke-dasharray:5 5} .t-zte{stroke:var(--zte)} .t-wan{stroke:var(--wan);stroke-width:2}
+.pk{transition:opacity .2s} .pk.t-lan{fill:var(--lan)} .pk.t-roce{fill:var(--ai)} .pk.t-direct{fill:var(--direct)} .pk.t-ts{fill:var(--ts)} .pk.t-zte{fill:var(--zte)} .pk.t-wan{fill:var(--wan)}
+.llabel{font:500 10px var(--f-mono);fill:var(--muted);paint-order:stroke;stroke:var(--zone);stroke-width:4px}
+.node{cursor:pointer;transition:opacity .2s}
+.node rect{fill:var(--node);stroke:var(--node-stroke);stroke-width:1.4;transition:stroke .15s,stroke-width .15s}
+.node path{fill:none;stroke:var(--fg);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.node .nm{font:600 10.5px var(--f-body);fill:var(--fg);text-anchor:middle;paint-order:stroke;stroke:var(--zone);stroke-width:4px}
+.node .ip{font:400 10px var(--f-mono);fill:var(--muted);text-anchor:middle;paint-order:stroke;stroke:var(--zone);stroke-width:4px}
+.node:hover rect,.node.sel rect{stroke:var(--fg);stroke-width:2.2}
+.node.guess rect{stroke-dasharray:4 3}
+.node.hub rect{stroke:var(--fg);stroke-width:2}
+svg.dim .link:not(.hot),svg.dim .pk:not(.hot){opacity:.08}
+svg.dim .node:not(.hot){opacity:.28}
+svg .link.hot{opacity:1}
+#runner{fill:var(--fg);stroke:var(--surface);stroke-width:2}
+aside{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+aside h2{font-family:var(--f-display);font-weight:600;font-size:1.2rem;margin:0;text-wrap:balance}
+aside .mono,.mono{font-family:var(--f-mono);font-size:.82rem;overflow-wrap:anywhere}
+aside p{margin:0;font-size:.9rem}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font-size:.72rem;font-weight:600;border-radius:6px;padding:2px 7px;border:1px solid currentColor}
+.note{font-size:.8rem;color:var(--warn)}
+dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;font-size:.84rem}
+dt{color:var(--muted)} dd{margin:0;overflow-wrap:anywhere}
+.sub{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.nb{display:flex;flex-wrap:wrap;gap:6px}
+.steps{margin:0;padding-left:1.2em;font-size:.88rem;display:flex;flex-direction:column;gap:6px}
+.idx{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+.idx section{display:flex;flex-direction:column;gap:6px;min-width:0}
+.idx h3{font:600 .78rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;margin:0;display:flex;gap:8px;align-items:center}
+.idx button{all:unset;cursor:pointer;display:flex;justify-content:space-between;gap:10px;padding:6px 8px;border-radius:8px;font-size:.87rem}
+.idx button:hover{background:var(--surface)}
+.idx button span:last-child{font-family:var(--f-mono);font-size:.76rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.fold{border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.fold>summary{cursor:pointer;list-style:none;padding:9px 14px;font:600 .74rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px;user-select:none}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary::before{content:'▸';font-size:.85rem;transition:transform .15s}
+.fold[open]>summary::before{transform:rotate(90deg)}
+.fold>summary:hover{color:var(--fg)}
+.foldin{padding:0 14px 12px}
+.foldin.bars{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding-top:2px}
+.foldin.bars .bar{display:contents}
+
+.stagecol{min-width:0;display:flex;flex-direction:column;gap:8px;position:relative}
+.stagecol:fullscreen{background:var(--bg);padding:10px}
+.stagecol:fullscreen #stage3d{flex:1 1 auto;aspect-ratio:auto;min-height:0;max-width:none}
+.stagecol:fullscreen #stage2d{flex:1 1 auto;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.stagecol:fullscreen svg#map{min-width:0;width:100%;height:100%}
+#fsx{position:absolute;top:12px;right:12px;z-index:6;display:none;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.stagecol:fullscreen #fsx{display:inline-flex}
+#fsTip{position:absolute;display:block;z-index:7;max-width:320px;padding:14px 16px 12px;background:color-mix(in srgb,var(--surface) 62%,transparent);border:1px solid color-mix(in srgb,var(--fg) 12%,transparent);border-radius:18px;box-shadow:0 12px 40px rgba(0,0,0,.18);backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);font-size:.85rem;line-height:1.5;opacity:0;visibility:hidden;transform:translateY(10px) scale(.95);transform-origin:0 100%;transition:opacity .16s ease,transform .24s cubic-bezier(.32,1.35,.5,1),visibility .16s}
+#fsTip.on{opacity:1;visibility:visible;transform:none}
+#fsTip .fsT-name{font:600 1.05rem var(--f-display);letter-spacing:-.01em;margin:0 0 2px}
+#fsTip .fsT-rows{display:grid;gap:2px;margin:6px 0 2px}
+#fsTip .fsT-row{display:flex;justify-content:space-between;gap:16px;align-items:baseline}
+#fsTip .fsT-k{color:var(--muted);font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+#fsTip .fsT-v{text-align:right;overflow-wrap:anywhere}
+#fsTip .fsT-close{position:absolute;top:8px;right:8px;padding:2px 8px;font-size:.8rem}
+#fsTip .strip{height:12px;margin:8px 0 2px}
+#fsTip .strip-lbl{font-size:.68rem;color:var(--muted)}
+@media (max-width:720px){
+  #fsTip{left:10px!important;right:10px;top:auto!important;bottom:12px;max-width:none;transform:translateY(14px);border-radius:20px 20px 16px 16px}
+  #fsTip.on{transform:none}
+}
+.node.past{opacity:.22}
+.node.past text{opacity:.5}
+#stage3d{position:relative;aspect-ratio:16/10;max-width:100%;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:linear-gradient(var(--s-bg2),var(--s-bg1))}
+#stage3d canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#stage3d canvas.pt{cursor:pointer}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.l3{position:absolute;left:0;top:0;white-space:nowrap;text-align:center;font:500 11px var(--f-body);color:var(--fg);transition:opacity .2s;will-change:transform}
+.l3 small{display:none;font:400 9.5px var(--f-mono);color:var(--muted)}
+.l3.on small{display:block}
+.l3.on{font-weight:600}
+.l3.dim{opacity:.25}
+.l3.z{font:600 10px var(--f-body);letter-spacing:.12em;text-transform:uppercase}
+.hint3d{position:absolute;left:12px;bottom:10px;font-size:.72rem;color:var(--muted);pointer-events:none}
+.stamp .live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px}
+.stamp.stale .live{background:var(--warn)}
+#q{font:400 .85rem var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;width:230px;max-width:100%;min-width:0}
+#q:focus-visible,.edit input:focus-visible,.edit select:focus-visible,a.open:focus-visible,.cams button:focus-visible,.card button:focus-visible{outline:2px solid var(--ts);outline-offset:2px}
+.none{font-size:.85rem;color:var(--muted)}
+.node.off{opacity:.45} .node.off rect{stroke-dasharray:2 3}
+.node.down rect{stroke:var(--bad);stroke-width:2.4} .node.down path{stroke:var(--bad)}
+.link.wifi{stroke-dasharray:1.5 5}
+.status{font-size:.84rem;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.unk{background:var(--line)}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+a.open{font:500 .85rem var(--f-body);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:6px 12px;text-decoration:none}
+a.open:hover{border-color:var(--muted)}
+.edit{display:flex;flex-direction:column;gap:8px}
+.edit label{display:flex;flex-direction:column;gap:3px;font-size:.76rem;color:var(--muted)}
+.edit input,.edit select{font:400 .88rem var(--f-body);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0}
+ul.fx{margin:0;padding-left:1.1em;font-size:.88rem;display:flex;flex-direction:column;gap:5px}
+.cams{position:absolute;top:10px;left:10px;right:10px;display:flex;flex-wrap:wrap;gap:6px}
+.cams button{font:500 .74rem var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 10px;cursor:pointer}
+.cams button:hover{border-color:var(--muted)}
+.l3.s{display:none} .l3.s.on{display:block}
+.l3.off{color:var(--muted);text-decoration:line-through}
+.sect{font:600 .78rem var(--f-body);letter-spacing:.08em;text-transform:uppercase;margin:0 0 8px}
+.svc{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.card .ctop{display:flex;align-items:center;gap:8px}
+.card button{all:unset;cursor:pointer;font-weight:600;font-size:.9rem}
+.card button:hover{text-decoration:underline}
+.card .meta{font-size:.76rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.card a{color:var(--fg);font-size:.8rem}
+.newrow{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.85rem;padding:6px 0;border-top:1px solid var(--line)}
+.rtt{font:500 9.5px var(--f-mono);fill:var(--fg);paint-order:stroke;stroke:var(--zone);stroke-width:4px}
+.rtt.warn{fill:var(--warn)} .rtt.bad{fill:var(--bad)}
+.l3.rl{font:500 9.5px var(--f-mono);color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:1px 6px;text-shadow:none}
+.l3.rl.warn{color:var(--warn)} .l3.rl.bad{color:var(--bad)}
+.pbar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.pbar i{display:block;height:100%;background:var(--ok);border-radius:99px}
+.prn,.hist{display:flex;flex-direction:column;gap:6px}
+.strip{display:flex;gap:1px;height:16px}
+.strip i{flex:1;border-radius:2px;background:var(--line)}
+.strip i.u{background:var(--ok)} .strip i.p{background:var(--warn)} .strip i.d{background:var(--bad)} .strip i.n{opacity:.35}
+.strip-lbl{font-size:.7rem;color:var(--muted)}
+.newrow select{font:400 .82rem var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 8px;max-width:100%;min-width:0}
+@media (max-width:900px){ .main{grid-template-columns:minmax(0,1fr)} }
+@media (max-width:640px){ #stage3d{aspect-ratio:4/5} .l3{font-size:10px} }
+@media (prefers-reduced-motion: reduce){ .link,.node,.pk{transition:none} }
+/* --- premium pass (Linear-style) --- */
+body{font-feature-settings:"cv01","ss03";-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  background:radial-gradient(1100px 420px at 50% -120px,color-mix(in srgb,var(--ts) 7%,transparent),transparent 70%),var(--bg)}
+h1{letter-spacing:-.03em}
+button.chip{border-radius:8px;font-weight:500;transition:background .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease;
+  background:color-mix(in srgb,var(--fg) 3%,transparent);box-shadow:0 1px 2px rgba(0,0,0,.05)}
+button.chip:hover{border-color:color-mix(in srgb,var(--fg) 28%,transparent);background:color-mix(in srgb,var(--fg) 6%,transparent)}
+button.chip[aria-pressed="true"]{background:color-mix(in srgb,var(--ts) 16%,transparent);border-color:color-mix(in srgb,var(--ts) 55%,transparent);color:var(--fg);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--ts) 40%,transparent)}
+button.chip[aria-pressed="true"]:hover{background:color-mix(in srgb,var(--ts) 22%,transparent)}
+.stage,#stage3d,aside,.fold{box-shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px -8px rgba(0,0,0,.08)}
+aside{background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(8px)}
+aside h2{letter-spacing:-.015em}
+dt{font-size:.68rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+dd{color:color-mix(in srgb,var(--fg) 86%,transparent)}
+.fold>summary{transition:color .15s ease,background .15s ease;border-radius:12px}
+.fold>summary:hover{background:color-mix(in srgb,var(--fg) 3%,transparent)}
+.fold[open]>summary{color:var(--fg)}
+::selection{background:color-mix(in srgb,var(--ts) 30%,transparent)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 22%,transparent);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+input#q{background:color-mix(in srgb,var(--fg) 3%,transparent);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:500 .85rem var(--f-body);color:var(--fg);transition:border-color .15s ease,box-shadow .15s ease}
+input#q:focus{outline:none;border-color:color-mix(in srgb,var(--ts) 55%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--ts) 18%,transparent)}
+</style>
+
+<script>(function(){try{var t=localStorage.getItem('mapa-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}})()</script>
+<div class="wrap">
+  <header>
+    <h1>My network map</h1>
+    <span class="stamp" id="stamp">Snapshot of 15 Nov 2026 · this copy does not auto-refresh</span>
+  </header>
+
+  <div class="bar" id="views"><span class="lbl">View</span></div>
+  <div class="bar" id="qres" hidden></div>
+
+  <details class="fold" id="morefold">
+    <summary>Filters, flows, exposure, drills</summary>
+    <div class="foldin bars">
+      <div class="bar" id="filters"><span class="lbl">Network</span></div>
+      <div class="bar" id="flows"><span class="lbl">Flow</span></div>
+      <div class="bar" id="expos"><span class="lbl">Access</span></div>
+    </div>
+  </details>
+
+  <div class="main">
+    <div class="stagecol"><div id="stage3d" hidden><div id="labels"></div><div class="cams" id="cams"></div><div class="hint3d">Drag to orbit · scroll or pinch to zoom · click a device</div></div><div class="stage" id="stage2d"><svg id="map" viewBox="0 0 1000 770" role="group" aria-label="Schemat sieci"></svg></div></div>
+    <aside id="panel" aria-live="polite"></aside>
+  </div>
+
+  <details class="fold"><summary>Services on the server</summary><div class="foldin"><div class="svc" id="svc"></div></div></details>
+  <details class="fold" id="outsec" hidden><summary>Recent outages (7 days)</summary><div class="foldin"><div id="outlist"></div></div></details>
+  <details class="fold" id="newsec" hidden><summary>Unknown devices on the LAN</summary><div class="foldin"><div id="newdev"></div></div></details>
+  <details class="fold"><summary>Device index</summary><div class="foldin"><div class="idx" id="idx"></div></div></details>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const NETS={
+  net:{name:'Internet & cloud',col:'var(--wan)',sub:'services away from home'},
+  lan:{name:'Home LAN',col:'var(--lan)',sub:'192.168.68.0/22 · brama 192.168.68.1'},
+  ai:{name:'AI cluster',col:'var(--ai)',sub:'10.55.0.0/30 + 2 × RoCE'},
+  ts:{name:'Tailscale',col:'var(--ts)',sub:'tail84733f.ts.net · 100.x'},
+  zte:{name:'Second LAN (ZTE)',col:'var(--zte)',sub:'192.168.0.0/24 · reachable via Tailscale'}
+};
+const ICON={
+  router:'M4 14h16v5H4z M8 14V9 M16 14V9 M7.5 16.5h.01',
+  computer:'M4 5h16v10H4z M9 19h6 M12 15v4',
+  server:'M5 4h14v6H5z M5 14h14v6H5z M8 7h.01 M8 17h.01',
+  phone:'M8 3h8v18H8z M11 18h2',
+  tv:'M3 5h18v11H3z M8 20h8',
+  printer:'M7 9V4h10v5 M5 9h14v8H5z M8 14h8v6H8z',
+  bulb:'M9 18h6 M10 21h4 M12 3a6 6 0 0 0-4 10.5V15h8v-1.5A6 6 0 0 0 12 3z',
+  appliance:'M5 3h14v18H5z M5 8h14 M9 14.5a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
+  air:'M4 9h10a3 3 0 1 0-3-3 M4 14h14a3 3 0 1 1-3 3 M4 11.5h7',
+  cloud:'M7 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.3A4.5 4.5 0 0 1 17 18z',
+  unknown:'M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7 M12 17h.01',
+  svc:'M6 8h12v8H6z M9 12h.01 M12 12h.01'
+};
+const N=[
+ {id:'cf',name:'Cloudflare Tunnel',ip:'apps.example.com',kind:'cloud',x:200,y:58,g:['net'],
+  desc:'Public addresses of your services. The tunnel is established from inside, so the router has no open ports.',
+  facts:[['ha.','Home Assistant :8123'],['cloud.','Docker service :8080'],['jellyfin.','Jellyfin :8096'],['faktury.','KSeF faktury :8787']]},
+ {id:'net',name:'Internet',ip:'home uplink',kind:'cloud',x:500,y:58,g:['net'],
+  desc:'The way out through the router. Telegram, mail, the Cloudflare tunnel and Tailscale all flow here.'},
+ {id:'api',name:'Cloud model APIs',ip:'DeepSeek · Claude',kind:'cloud',x:800,y:58,g:['net'],
+  desc:'Cloud models: a paid LLM API for the fallback bot and Claude Sonnet for the screen subagent.',
+  facts:[['fallback','Cloud LLM (paid API)'],['screen','Claude Sonnet (subscription)']]},
+ {id:'router',name:'Router',ip:'192.168.68.1',kind:'router',x:325,y:190,g:['lan'],
+  desc:'Home LAN gateway and the way out to the internet. The MAC points to TP-Link; the 192.168.68.x addressing is typical for a Deco setup.',
+  facts:[['Subnets','192.168.68.0/22'],['Vendor','TP-Link (wg MAC)']]},
+ {id:'hue',name:'Mostek Hue',ip:'192.168.68.52',kind:'bulb',x:60,y:300,g:['lan'],
+  desc:'Philips Hue Bridge (C644E5). Drives the lighting, visible to Home Assistant.'},
+ {id:'tahoma',name:'TaHoma Switch',ip:'adres nieustalony',kind:'router',x:168,y:300,g:['lan'],guess:1,
+  desc:'A Somfy TaHoma Switch hub driving seven blinds over io-homecontrol radio. Home Assistant reaches it via the Somfy cloud, so it does not know its IP. The MAC is not assigned yet: pick the right address in the unknown-devices section at the bottom.',
+  facts:[['Rolety','Okno Tosia, Sypialnia, Salon 1–3, Okno biuro, Drzwi balkonowe'],['Home Assistant','integracja Overkiz (chmura Somfy)']]},
+ {id:'lex',name:'Lexmark MC3224dwe',ip:'192.168.68.58',kind:'printer',x:276,y:300,g:['lan'],
+  desc:'Drukarka wielofunkcyjna: druk (IPP), skaner, panel WWW na porcie 80.'},
+ {id:'tv',name:'Telewizor Samsung',ip:'192.168.68.60 · .66',kind:'tv',x:384,y:300,g:['lan'],
+  desc:'A TV with AirPlay. The same MAC shows up under two IPs.'},
+ {id:'bosch',name:'Zmywarka Bosch',ip:'192.168.68.53',kind:'appliance',x:492,y:300,g:['lan'],
+  desc:'Bosch SMV4HVX37E dishwasher (Home Connect). The MAC belongs to BSH, so the .53 assignment is certain.'},
+ {id:'unk',name:'Xiaomi',ip:'192.168.68.67',kind:'air',x:600,y:300,g:['lan'],guess:1,
+  desc:'A Xiaomi device (Xiaomi vendor MAC); the Xiaomi Home integration runs in Home Assistant. Which of the three (.50, .51, .67) is the air purifier, I cannot tell from here.'},
+ {id:'xi1',name:'Xiaomi',ip:'192.168.68.50',kind:'air',x:60,y:410,g:['lan'],guess:1,
+  desc:'A Xiaomi device (per MAC). One of the three (.50, .51, .67) is a Mi Air Purifier (zhimi-airpurifier-m1); cannot tell which from here.'},
+ {id:'xi2',name:'Xiaomi',ip:'192.168.68.51',kind:'air',x:165,y:410,g:['lan'],guess:1,
+  desc:'Another Xiaomi device (per MAC). See the note at 192.168.68.50.'},
+ {id:'iph',name:'iPhone',ip:'192.168.68.56',kind:'phone',x:270,y:410,g:['lan'],
+  desc:'iPhone on the home Wi-Fi (announces as iPhone.local). Away from home it connects over Tailscale.'},
+ {id:'priv',name:'4 mobile devices',ip:'.55 · .57 · .62 · .65',kind:'phone',x:375,y:410,g:['lan'],guess:1,
+  desc:'Four devices with random (private) MACs, most likely phones, tablets or watches. They do not announce names.'},
+ {id:'mac',name:'Home server',ip:'192.168.68.54',kind:'computer',x:560,y:410,g:['lan','ai','ts'],hub:1,
+  desc:'The center of it all: sits in three networks at once and keeps the Cloudflare tunnel. The assistant and home services run here.',
+  facts:[['Home LAN','192.168.68.54 (1 GbE, Wi-Fi off)'],['Link to the GX10','10.55.0.1'],['Tailscale','100.118.235.98 (vaultwarden-mac-mini)'],
+         ['Services','assistant bot + panel :9119, Home Assistant :8123, Jellyfin :8096, Vaultwarden :8081, e-invoicing :8787, Transmission :9091'],
+         ['Tailscale Serve',':443 Vaultwarden · :10443 assistant panel · :9443 model API · :8443 service :8880']]},
+ {id:'gxa',name:'GX10 (primary)',ip:'10.55.0.2',kind:'server',x:740,y:300,g:['ai','lan'],
+  desc:'gx10-d2a2, the primary node. Serves the GLM-5.3-Flash model at 10.55.0.2:8888.',
+  facts:[['Do Maca','10.55.0.2 (direct cable)'],['Do drugiego GX10','10.200.0.1 i 10.200.1.1 (RoCE)'],['Wi-Fi','192.168.68.63'],['Kontener','glm53-flash-tf']]},
+ {id:'gxb',name:'GX10 (second)',ip:'10.200.0.2',kind:'server',x:900,y:300,g:['ai','lan'],
+  desc:'gx10-cd92, the second node. The model is sharded across both machines over two RoCE links.',
+  facts:[['To the primary GX10','10.200.0.2 i 10.200.1.2 (RoCE)'],['Wi-Fi','192.168.68.59'],['Access SSH','via the primary GX10 (ProxyJump)']]},
+ {id:'tsi',name:'iphone171',ip:'100.68.42.76',kind:'phone',x:250,y:570,g:['ts'],
+  desc:'iPhone in the tailnet. The assistant panel and Vaultwarden open from here, even outside home.'},
+ {id:'hp',name:'hp-t630',ip:'100.93.180.2',kind:'computer',x:545,y:570,g:['ts','zte'],
+  desc:'A Windows box (HP t630) in the second location, acting as the Tailscale subnet router: it advertises 192.168.0.0/24 so the server sees devices behind the ZTE router, printer included.',
+  facts:[['Tailscale','100.93.180.2'],['ZTE net','192.168.0.2'],['Access','SSH via the server']]},
+ {id:'zte',name:'Router ZTE',ip:'192.168.0.1',kind:'router',x:330,y:694,g:['zte'],
+  desc:'Router of the second network. Responds to ping from the server via Tailscale.'},
+ {id:'qidi',name:'QIDI X-Plus 5',ip:'192.168.0.4',kind:'printer',x:760,y:694,g:['zte'],
+  desc:'A 3D printer. The server sends files and starts prints over Moonraker; the whole path runs through the Tailscale tunnel to hp-t630 and the ZTE network.',
+  facts:[['Moonraker','192.168.0.4:7125']]},
+ {id:'mmw',name:'mac-mini-work',ip:'100.76.65.3',kind:'computer',x:840,y:570,g:['ts'],
+  desc:'A second Mac mini (work) in the tailnet.'}
+];
+const TS='https://vaultwarden-mac-mini.tail84733f.ts.net';
+const SVC=[
+ {id:'s-hermes',name:'Assistant',port:9119,ex:'tail',url:TS+':10443',desc:'Bot gateway (Telegram) and the panel. The panel is served via Tailscale Serve on port 10443.'},
+ {id:'s-ha',name:'Home Assistant',port:8123,ex:'inet',url:'https://ha.example.com',desc:'Home automation. Listens on all interfaces and has a public address via Cloudflare.'},
+ {id:'s-vw',name:'Vaultwarden',port:8081,ex:'tail',url:TS,desc:'Password manager. Reachable only via Tailscale Serve (port 443).'},
+ {id:'s-jf',name:'Jellyfin',port:8096,ex:'inet',url:'https://media.example.com',desc:'Media library with a public address via Cloudflare.'},
+ {id:'s-ksef',name:'E-invoicing',port:8787,ex:'inet',url:'https://invoices.example.com',desc:'Serwis faktur of publicznym adresem przez Cloudflare.'},
+ {id:'s-cloud',name:'Cloud (Docker)',port:8080,ex:'inet',url:'https://apps.example.com',desc:'A Docker service on port 8080, publicly as apps.example.com.'},
+ {id:'s-tr',name:'Transmission',port:9091,ex:'home',url:'http://192.168.68.54:9091',desc:'Torrent client. The panel listens on all interfaces, so it is reachable from the home LAN.'},
+ {id:'s-cf',name:'Tunel Cloudflare',port:null,ex:'inet',desc:'The cloudflared process keeping the outbound tunnel to Cloudflare and serving four public hostnames.'}
+];
+const EXN={inet:'z internetu',tail:'tylko tailnet',home:'home LAN'};
+SVC.forEach(s=>N.push({id:s.id,name:s.name,ip:s.port?'port '+s.port:'proces',kind:'svc',g:['svc'],svc:1,x:0,y:0,desc:s.desc,url:s.url,facts:[['Runs on','the server'],['Access',EXN[s.ex]]]}));
+const SVCALL=SVC.concat([{id:'s-glm',name:'GLM model (on GX10)',port:8888,ex:'tail',node:'gxa'}]);
+const URLS={router:'http://192.168.68.1',lex:'http://192.168.68.58',zte:'http://192.168.0.1',qidi:'http://192.168.0.4'};
+N.forEach(n=>{n.name0=n.name;if(URLS[n.id])n.url=URLS[n.id]});
+const EXPO=[
+ {id:'inet',name:'Widoczne of internetu',nodes:['cf','net','router','mac','s-ha','s-jf','s-ksef','s-cloud','s-cf'],links:[['net','cf'],['net','router'],['router','mac']],
+  intro:'Four services have public addresses via Cloudflare Tunnel. The router has no open ports, but anyone who knows the address can reach each of them; only their own login protects them.',
+  items:['ha.example.com → Home Assistant','apps.example.com → Docker service (:8080)','media.example.com → Jellyfin','invoices.example.com → e-invoicing']},
+ {id:'tail',name:'Tylko przez Tailscale',nodes:['mac','tsi','hp','mmw','gxa','s-vw','s-hermes'],links:[['mac','tsi'],['mac','hp'],['mac','mmw'],['mac','gxa']],
+  intro:'Reachable only from devices in your tailnet, via Tailscale Serve on the server.',
+  items:[':443 → Vaultwarden',':10443 → assistant panel',':9443 → GLM model API on the GX10',':8443 → service on port 8880',':11443 → this map, live version']},
+ {id:'home',name:'On the home LAN',nodes:['router','mac','hue','lex','tv','bosch','unk','xi1','xi2','iph','priv','gxa','gxb','s-tr','s-ha','s-jf'],
+  links:['hue','lex','tv','bosch','unk','xi1','xi2','iph','priv','mac','gxa','gxb'].map(i=>['router',i]),
+  intro:'Any device on the home Wi-Fi can reach these panels and services. Three server services listen on all interfaces.',
+  items:['Transmission :9091','Home Assistant :8123','Jellyfin :8096','device panels: router, Lexmark printer, Hue bridge']},
+ {id:'out',name:'Data sent to the cloud',nodes:['mac','router','net','api','s-hermes'],links:[['router','mac'],['net','router'],['net','api']],
+  intro:'These send conversation content outside the house. The main on-prem model bot stays local.',
+  items:['Fallback → cloud LLM (paid API): the whole conversation','subagent „ekran” → Claude Sonnet: zadanie i zrzuty ekranu','Telegram: messages to and from the bots']}
+];
+const L=[
+ ['net','cf','wan'],['net','api','wan'],['net','router','wan','WAN'],
+ ['router','hue','lan'],['router','tahoma','lan'],['router','lex','lan'],['router','tv','lan'],['router','bosch','lan'],['router','unk','lan'],
+ ['router','xi1','lan'],['router','xi2','lan'],['router','iph','lan'],['router','priv','lan'],
+ ['router','mac','lan','1 Gb/s'],
+ ['router','gxa','lan','Wi-Fi',[560,150]],['router','gxb','lan','',[640,120]],
+ ['mac','gxa','direct','10.55.0.0/30'],
+ ['gxa','gxb','roce','RoCE',[820,262]],['gxa','gxb','roce','',[820,338]],
+ ['mac','tsi','ts'],['mac','hp','ts'],['mac','mmw','ts'],
+ ['hp','zte','zte'],['zte','qidi','zte']
+];
+const FLOWS=[
+ {id:'tg',name:'Telegram → assistant → LLM',path:['net','router','mac','gxa','gxb'],
+  steps:['A Telegram message arrives from the internet via the router to the server.','The assistant on the server queries the model over the direct link (10.55.0.2:8888).','Both GX10 nodes answer together over the RoCE links.']},
+ {id:'ip',name:'iPhone → assistant panel',path:['tsi','mac'],
+  steps:['The iPhone connects over an encrypted Tailscale tunnel to server.tailnet…:10443.','Tailscale Serve on the server forwards the traffic to the assistant panel at 127.0.0.1:9119.','Model zostaje na GX10; telefon rozmawia tylko of Makiem.']},
+ {id:'fk',name:'invoices.example.com',path:['cf','net','router','mac'],
+  steps:['The browser hits Cloudflare.','Cloudflare hands the traffic to the tunnel the server established from inside.','On the server, the e-invoicing service answers at 127.0.0.1:8787.']},
+ {id:'ep',name:'LLM outage → fallback',path:['mac','router','net','api'],
+  steps:['A watchdog checks the model on the GX10 every 30 min and alerts when it is down.','You then write to the fallback bot running on the server.','The fallback asks the cloud API, so this data leaves the house.']},
+ {id:'qd',name:'Print job → QIDI',path:['mac','hp','zte','qidi'],
+  steps:['The server sends the .gcode.3mf file to 192.168.0.4:7125.','The route to 192.168.0.0/24 goes over Tailscale to hp-t630 sitting in the ZTE network.','hp-t630 forwards the traffic through the ZTE router to the printer; Moonraker starts the print.']},
+ {id:'ha',name:'Home Assistant → Hue',path:['mac','router','hue'],
+  steps:['Home Assistant runs on the server (:8123).','The command goes through the router to the Hue bridge on the home LAN.','The bridge drives the bulbs over its own radio (Zigbee).']}
+];
+const SVG='http://www.w3.org/2000/svg';
+const el=(t,a={},p)=>{const e=document.createElementNS(SVG,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e};
+const h=(t,a={},txt)=>{const e=document.createElement(t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;return e};
+const svg=document.getElementById('map'), panel=document.getElementById('panel');
+const byId=Object.fromEntries(N.map(n=>[n.id,n]));
+
+// zones
+[['net',20,14,960,96],['lan',20,128,610,350],['ai',650,128,330,350],['ts',20,496,960,138],['zte',20,646,960,112]].forEach(([k,x,y,w,hh])=>{
+  el('rect',{class:'zone',x,y,width:w,height:hh,rx:14},svg);
+  el('text',{class:'zlabel',x:x+14,y:y+20},svg).textContent=NETS[k].name;
+  const s=el('text',{class:'zsub',x:x+w-14,y:y+20,'text-anchor':'end'},svg); s.textContent=NETS[k].sub;
+});
+// links
+const gl=el('g',{},svg), gp=el('g',{},svg), gn=el('g',{},svg);
+const links=L.map(([a,b,type,label,c],i)=>{
+  const A=byId[a],B=byId[b];
+  const d=c?`M${A.x} ${A.y} Q${c[0]} ${c[1]} ${B.x} ${B.y}`:`M${A.x} ${A.y} L${B.x} ${B.y}`;
+  const path=el('path',{class:'link t-'+type,d},gl);
+  const len=path.getTotalLength();
+  if(label){const m=path.getPointAtLength(len*.5);el('text',{class:'llabel',x:m.x+8,y:m.y-6},gl).textContent=label}
+  const cnt=type==='roce'?4:type==='direct'?3:type==='wan'?2:1;
+  const speed=type==='roce'?260:type==='direct'?150:type==='ts'?45:70;
+  const pk=[];for(let j=0;j<cnt;j++)pk.push({e:el('circle',{class:'pk t-'+type,r:type==='roce'?3:2.6},gp),off:(j/cnt+i*.37)%1,dir:(i+j)%2?1:-1});
+  const mid=path.getPointAtLength(len*.5), rt=el('text',{class:'rtt',x:mid.x,y:mid.y+(label?18:12),'text-anchor':'middle'},gl); rt.style.display='none';
+  return {a,b,type,path,len,pk,speed,rt};
+});
+{const seenK={};links.forEach(l=>{const k=l.a+'|'+l.b;l.key=k;l.k=seenK[k]||0;seenK[k]=l.k+1})}
+// nodes
+N.forEach(n=>{
+  const g=el('g',{class:'node'+(n.guess?' guess':'')+(n.hub?' hub':''),transform:`translate(${n.x} ${n.y})`,tabindex:0,role:'button','aria-label':n.name+' '+n.ip},n.svc?null:gn);
+  const r=n.hub?26:21;
+  el('rect',{x:-r,y:-r,width:2*r,height:2*r,rx:n.kind==='cloud'?r:11},g);
+  el('path',{d:ICON[n.kind],transform:`translate(-12 -12)`},g);
+  el('text',{class:'nm',y:r+15},g).textContent=n.name;
+  el('text',{class:'ip',y:r+28},g).textContent=n.ip;
+  n.el=g;
+  g.addEventListener('click',()=>select(n.id));
+  g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(n.id)}});
+  g.addEventListener('mouseenter',()=>{hover=n.id;paint()});
+  g.addEventListener('mouseleave',()=>{hover=null;paint()});
+});
+const runner=el('circle',{id:'runner',r:6},svg); runner.setAttribute('visibility','hidden');
+
+let V3=null, view='2d';
+let sel=null, hover=null, filt=null, flow=null, expo=null, flowT=0, playing=true, editing=false;
+let LIVE=null, liveMode=false, NOTES={}, showRtt=false, HIST=null, histT=0, renderSeq=0, newSig='';
+const sim={on:false,down:new Set(),reach:new Set()};
+const CONN0={mac:'kabel',gxa:'wifi',gxb:'wifi',iph:'wifi',priv:'wifi'};
+const CONN_TXT={kabel:'kabel',wifi:'Wi-Fi'};
+const $=id=>document.getElementById(id);
+const neigh=id=>links.filter(l=>l.a===id||l.b===id);
+const isLink=(l,a,b)=>(l.a===a&&l.b===b)||(l.a===b&&l.b===a);
+const lanLink=id=>links.find(l=>l.type==='lan'&&l.b===id);
+const connOf=id=>(NOTES[id]&&NOTES[id].conn)||CONN0[id]||'';
+const fmtT=s=>new Date(s*1000).toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
+const fmtD=s=>new Date(s*1000).toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit'})+' '+fmtT(s);
+
+function paint(){
+  const hotN=new Set(), hotL=new Set();
+  const focus=hover||sel;
+  if(flow){flow.path.forEach(i=>hotN.add(i));flow.segs.forEach(s=>hotL.add(s.l))}
+  else if(expo){expo.nodes.forEach(i=>hotN.add(i));links.forEach(l=>{if(expo.links.some(([a,b])=>isLink(l,a,b)))hotL.add(l)})}
+  else if(focus){hotN.add(focus);neigh(focus).forEach(l=>{hotL.add(l);hotN.add(l.a);hotN.add(l.b)});
+    if(focus==='mac')N.forEach(n=>n.svc&&hotN.add(n.id)); if(byId[focus].svc)hotN.add('mac')}
+  else if(filt){N.forEach(n=>n.g.includes(filt)&&hotN.add(n.id));
+    links.forEach(l=>{const ok=filt==='lan'?l.type==='lan':filt==='ai'?(l.type==='roce'||l.type==='direct'):filt==='ts'?l.type==='ts':filt==='zte'?l.type==='zte':l.type==='wan';if(ok)hotL.add(l)})}
+  const dim=hotN.size>0; svg.classList.toggle('dim',dim);
+  N.forEach(n=>{n.el.classList.toggle('hot',hotN.has(n.id));n.el.classList.toggle('sel',n.id===sel)});
+  links.forEach(l=>{const on=hotL.has(l);l.path.classList.toggle('hot',on);l.pk.forEach(p=>p.e.classList.toggle('hot',on))});
+  if(V3)V3.paint(hotN,hotL,dim);
+}
+function syncChips(){
+  document.querySelectorAll('#flows button').forEach(b=>b.setAttribute('aria-pressed',String(!!flow&&b.dataset.id===flow.id)));
+  document.querySelectorAll('#expos button').forEach(b=>b.setAttribute('aria-pressed',String(!!expo&&b.dataset.id===expo.id)));
+  document.querySelectorAll('#filters button[data-net]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.net===filt)));
+  simBtn.setAttribute('aria-pressed',String(sim.on));
+}
+function resetModes(keep){
+  if(keep!=='flow'&&flow){flow=null;runner.setAttribute('visibility','hidden');if(V3)V3.runnerVisible(false)}
+  if(keep!=='expo')expo=null;
+  if(keep!=='filt')filt=null;
+  if(keep!=='sel')sel=null;
+  if(keep!=='sim'&&sim.on){sim.on=false;applyStates()}
+  editing=false; syncChips();
+}
+function netTags(n){const d=h('div',{class:'tags'});n.g.forEach(k=>{const t=h('span',{class:'tag'},NETS[k]?NETS[k].name:'Service on the server');t.style.color=NETS[k]?NETS[k].col:'var(--muted)';d.append(t)});return d}
+function showOverview(){
+  const D=LIVE&&LIVE.devices, P=LIVE&&LIVE.printer;
+  const dl=h('dl'); const rows=[];
+  if(D){
+    const lanIds=['router','hue','lex','tv','bosch','unk','xi1','xi2','iph','priv'];
+    const up=lanIds.filter(i=>D[i]&&D[i].up).length;
+    rows.push(['Home LAN',up===lanIds.length?'all devices respond':up+' of '+lanIds.length+' respond']);
+    const dn=OUT_IDS.filter(i=>(D[i]&&!D[i].up&&!D[i].never)||(LIVE.services[i]&&!LIVE.services[i].up));
+    if(dn.length)rows.push(['Nie respond',dn.map(nameOf).join(', ')]);
+  }
+  if(P)rows.push(['3D printer',(PSTATE[P.state]||P.state)+(P.state==='printing'?' · '+Math.round(P.progress*100)+'%'+(P.eta?', elapsed '+fmtDur(P.eta):''):'')]);
+  if(LIVE&&LIVE.links){
+    const L2=LIVE.links, bits=[];
+    const add=(name,m)=>{if(m&&m.rtt!=null)bits.push(name+' '+fmtMs(m.rtt)+(m.relay?' (przez serwer '+String(m.region||'').toUpperCase()+')':''))};
+    add('router',L2['router|mac']);add('internet',L2['net|router']);add('GX10',L2['mac|gxa']);add('iPhone',L2['mac|tsi']);add('hp-t630',L2['mac|hp']);add('ZTE network',L2['hp|zte']);
+    if(bits.length)rows.push(['Latency',bits.join(' · ')]);
+  }
+  rows.forEach(([k,v])=>dl.append(h('dt',{},k),h('dd',{},v)));
+  const acts0=h('div',{class:'acts'});acts0.append(h('a',{class:'chip',href:'export.csv',download:'netglass.csv'},'Export CSV'));
+  panel.replaceChildren(h('h2',{},'Stan'),dl,
+    h('p',{class:'sub'},'Click a device on the map for details.'),acts0);
+}
+// ----- device panel
+function statusLine(n){
+  if(sim.on||!LIVE)return null;
+  const d=n.svc?LIVE.services[n.id]:LIVE.devices[n.id]; if(!d)return null;
+  if(d.never){const s0=h('div',{class:'status'});s0.append(h('span',{class:'dot unk'}),h('span',{},'MAC address not assigned yet'));return s0}
+  const s=h('div',{class:'status'}); s.append(h('span',{class:'dot '+(d.up?'ok':'bad')}));
+  let t=d.up?'Responding':'Nie respond'; if(!d.up&&d.last_seen)t+=' · last seen '+fmtD(d.last_seen);
+  s.append(h('span',{},t+' (checked '+fmtT(LIVE.ts)+')'));
+  return s;
+}
+function renderNode(n){
+  const my=++renderSeq;
+  const note=NOTES[n.id]||{};
+  panel.replaceChildren(h('h2',{},n.name),netTags(n),h('div',{class:'mono'},n.ip));
+  const st=statusLine(n); if(st)panel.append(st);
+  if(st&&n.state==='off'&&(n.id==='iph'||n.id==='priv'))panel.append(h('p',{class:'none'},'Sleeping phones often skip ping.'));
+  if(note.note)panel.append(h('p',{},'Note: '+note.note));
+  panel.append(h('p',{},n.desc));
+  if(n.guess)panel.append(h('p',{class:'note'},'Identification uncertain.'));
+  const dl=h('dl'); (n.facts||[]).forEach(([k,v])=>dl.append(h('dt',{},k),h('dd',{},v)));
+  if(lanLink(n.id))dl.append(h('dt',{},'Link'),h('dd',{},CONN_TXT[connOf(n.id)]||'unknown'));
+  if(n.name!==n.name0)dl.append(h('dt',{},'Recognized as'),h('dd',{},n.name0));
+  const DV=LIVE&&!sim.on&&!n.svc&&LIVE.devices[n.id];
+  if(DV){ if(DV.vendor)dl.append(h('dt',{},'Vendor (MAC)'),h('dd',{},DV.vendor));
+    if(DV.rtt!=null)dl.append(h('dt',{},'Latency'),h('dd',{},fmtMs(DV.rtt)+' from the server'+(DV.relay?' · Tailscale relays via a coordination server ('+String(DV.region||'').toUpperCase()+'), not directly':DV.relay===false?' · direct Tailscale connection':''))) }
+  if(dl.children.length)panel.append(dl);
+  const acts=h('div',{class:'acts'});
+  if(n.url){const a=h('a',{class:'open',href:n.url,target:'_blank',rel:'noopener'},'Open ↗');acts.append(a)}
+  const eb=h('button',{class:'chip',type:'button',id:'edit-btn'},'Name & note'); eb.onclick=()=>editForm(n,acts); acts.append(eb);
+  if(DV&&DV.mac&&!DV.up){const wb=h('button',{class:'chip',type:'button',id:'wol'},'Wake (WoL)');
+    wb.onclick=async()=>{wb.disabled=true;wb.textContent='Sending magic…';
+      try{const r=await fetch('wol',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:n.id})});wb.textContent=r.ok?'Sent ✓ (give it a moment)':'Send error'}
+      catch(e){wb.textContent='Send error'}};
+    acts.append(wb)}
+  panel.append(acts);
+  if(n.url)panel.append(h('div',{class:'mono'},n.url));
+  if(n.id==='qidi'&&!sim.on){const pb=printerBlock();if(pb)panel.append(pb)}
+  const others=[...new Set(neigh(n.id).map(l=>l.a===n.id?l.b:l.a))]; if(n.svc)others.push('mac');
+  if(others.length){panel.append(h('div',{class:'sub'},'Links'));const nb=h('div',{class:'nb'});
+    others.forEach(o=>{const b=h('button',{class:'chip',type:'button'},byId[o].name);b.onclick=()=>select(o);nb.append(b)});panel.append(nb)}
+  if(!sim.on)histInto(n.id,my);
+}
+function editForm(n,slot){
+  editing=true; const cur=NOTES[n.id]||{}, f=h('form',{class:'edit',id:'edit-form'});
+  const field=(lbl,inp)=>{const l=h('label',{},lbl);l.append(inp);f.append(l);return inp};
+  const iName=field('Custom name',h('input',{id:'ed-name',type:'text',maxlength:'60',placeholder:n.name0,value:cur.name||''}));
+  const iNote=field('Note (room, owner)',h('input',{id:'ed-note',type:'text',maxlength:'160',value:cur.note||''}));
+  let iConn=null;
+  if(lanLink(n.id)){iConn=h('select',{id:'ed-conn'});[['','unknown'],['kabel','kabel'],['wifi','Wi-Fi']].forEach(([v,t])=>{const o=h('option',{value:v},t);if(v===(cur.conn||''))o.selected=true;iConn.append(o)});field('Link of routerem',iConn)}
+  f.append(h('p',{class:'none'},liveMode?'Saved on the server, visible on all your devices.':'Saved in this browser only.'));
+  const row=h('div',{class:'acts'}), ok=h('button',{class:'chip',type:'submit','aria-pressed':'true',id:'ed-save'},'Save'), no=h('button',{class:'chip',type:'button',id:'ed-cancel'},'Cancel');
+  row.append(ok,no); f.append(row);
+  no.onclick=()=>{editing=false;renderNode(n)};
+  f.addEventListener('submit',e=>{e.preventDefault();const v={};
+    if(iName.value.trim())v.name=iName.value.trim(); if(iNote.value.trim())v.note=iNote.value.trim(); if(iConn&&iConn.value)v.conn=iConn.value;
+    if(Object.keys(v).length)NOTES[n.id]=v; else delete NOTES[n.id];
+    saveNotes(); editing=false; applyNotes(); renderNode(n)});
+  slot.replaceWith(f); iName.focus();
+}
+function saveNotes(){
+  const body=JSON.stringify(NOTES);
+  try{localStorage.setItem('mapa-notatki',body)}catch(e){}
+  if(liveMode)fetch('notes',{method:'POST',headers:{'Content-Type':'application/json'},body}).catch(()=>{});
+}
+function applyNotes(){
+  N.forEach(n=>{n.name=(NOTES[n.id]&&NOTES[n.id].name)||n.name0});
+  refreshNames();
+  links.forEach(l=>{if(l.type!=='lan')return;const w=connOf(l.b)==='wifi';l.path.classList.toggle('wifi',w);if(V3)V3.conn(l,w)});
+  buildIndex(); renderSvc();
+}
+// ----- live status
+function nodeState(n){
+  if(sim.on){if(n.svc)return sim.down.has('mac')?'off':'ok';return sim.down.has(n.id)?'down':sim.reach.has(n.id)?'ok':'off'}
+  if(replay.on&&replay.data)return (replay.data.d||{})[n.id]===0?'off':'ok';
+  if(!LIVE)return 'ok';
+  const d=n.svc?LIVE.services[n.id]:LIVE.devices[n.id];
+  return d&&d.up===false&&!d.never?'off':'ok';
+}
+function applyStates(){
+  N.forEach(n=>{n.state=nodeState(n);n.el.classList.toggle('off',n.state==='off');n.el.classList.toggle('down',n.state==='down');
+    n.el.classList.toggle('past',!!(replay.on&&replay.data&&(replay.data.d||{})[n.id]===0))});
+  if(V3)V3.states(); refreshNames(); applyLinks(); renderSvc(); renderNew(); stamp();
+  if(sel&&!sim.on&&!editing&&!replay.on)renderNode(byId[sel]);
+  else if(!sel&&!flow&&!expo&&!sim.on&&!editing&&!replay.on)showOverview();
+}
+function stamp(){
+  const e=$('stamp');
+  if(replay.on){e.classList.remove('stale');const t=replay.data&&replay.data.t;
+    e.replaceChildren(h('span',{class:'live'}),t?'Time travel: state as of '+fmtDur(replay.hours*3600)+''+fmtD(t):'Time travel: no saved data for this moment');
+    return}
+  if(!LIVE)return;
+  const age=Date.now()/1000-LIVE.ts, stale=age>600;
+  e.classList.toggle('stale',stale); e.replaceChildren(h('span',{class:'live'}),stale?'Stale data, last read '+fmtD(LIVE.ts):'Live · read '+fmtT(LIVE.ts)+', next check in 2 min');
+}
+function renderSvc(){
+  const box=$('svc'); box.replaceChildren();
+  SVCALL.forEach(s=>{
+    const up=(!LIVE||sim.on)?null:(LIVE.services[s.id]||{}).up, c=h('div',{class:'card'}), top=h('div',{class:'ctop'});
+    const b=h('button',{type:'button',id:'svc-'+s.id},s.name); b.onclick=()=>go(s.node||s.id);
+    top.append(h('span',{class:'dot '+(up==null?'unk':up?'ok':'bad'),title:up==null?'stan nieznany':up?'odpowiada':'nie respond'}),b); c.append(top);
+    const m=h('div',{class:'meta'}); if(s.port)m.append(h('span',{class:'mono'},':'+s.port)); m.append(h('span',{},EXN[s.ex]));
+    if(up===false)m.append(h('span',{},'nie respond'));
+    c.append(m); if(s.url)c.append(h('a',{href:s.url,target:'_blank',rel:'noopener'},'Open ↗'));
+    box.append(c)});
+}
+const ASSIGN=['router','hue','tahoma','lex','tv','bosch','unk','xi1','xi2','iph','priv'];
+function renderNew(){
+  const sec=$('newsec'), box=$('newdev'), list=(LIVE&&LIVE.unknown)||[];
+  sec.hidden=!list.length;
+  const sig=JSON.stringify(list.map(u=>[u.ip,u.mac]))+liveMode; if(sig===newSig)return; newSig=sig; box.replaceChildren();
+  list.forEach((u,i)=>{
+    const r=h('div',{class:'newrow'});
+    r.append(h('span',{class:'mono'},u.ip),h('span',{class:'mono'},u.mac),h('span',{},u.vendor||(u.private?'private MAC, usually a phone or watch':'vendor unknown')));
+    if(u.hint)r.append(h('span',{class:'none'},u.hint));
+    r.append(h('span',{class:'none'},'first seen '+fmtD(u.first_seen)));
+    if(liveMode){
+      const sl=h('select',{id:'as-'+i,'aria-label':'Przypisz '+u.mac+' device'}); sl.append(h('option',{value:''},'Assign to…'));
+      N.filter(n=>ASSIGN.includes(n.id)).forEach(n=>sl.append(h('option',{value:n.id},n.name+' ('+n.ip+')')));
+      const bt=h('button',{class:'chip',type:'button',id:'asb-'+i},'Save');
+      bt.onclick=async()=>{if(!sl.value)return;bt.textContent='Saving…';
+        try{await fetch('assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mac:u.mac,id:sl.value})})}catch(e){}
+        newSig=''; setTimeout(loadLive,9000); bt.textContent='Saved, refreshing…'};
+      r.append(sl,bt);
+    }
+    box.append(r)});
+}
+async function loadLive(){
+  try{
+    const r=await fetch('status.json',{cache:'no-store'}); if(!r.ok)throw 0;
+    const j=await r.json(); if(!j||!j.devices)throw 0; LIVE=j;
+    if(!liveMode){liveMode=true;setInterval(loadLive,30000);
+      try{const n=await fetch('notes.json',{cache:'no-store'});if(n.ok){NOTES=await n.json()||{};applyNotes()}}catch(e){}
+      try{const es=new EventSource('stream');es.addEventListener('refresh',()=>loadLive());
+        es.addEventListener('error',()=>{try{es.close()}catch(e){}})}catch(e){}}
+  }catch(e){if(!liveMode)return}
+  rttBtn.hidden=!LIVE;
+  applyStates(); loadHist().then(()=>{renderOutages();if(sel&&fsTip&&fsTip.classList.contains('on'))updateFsTip()});
+}
+// ----- live data helpers: latency, printer, history
+const OUT_IDS=['router','hue','gxa','gxb','hp','zte','net','cf','s-ha','s-vw','s-jf','s-ksef','s-cloud','s-tr','s-cf','s-glm'];
+const PSTATE={standby:'Gotowa, nie drukuje',printing:'Drukuje',paused:'Wstrzymana',complete:'Print finished',cancelled:'Anulowany',error:'Error'};
+const fmtMs=x=>x==null?'':(x<10?x.toFixed(1).replace('.',','):String(Math.round(x)))+' ms';
+const fmtDur=sec=>{const m=Math.round(sec/60);return m>=60?Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min':m+' min'};
+const nameOf=id=>(byId[id]&&byId[id].name)||((SVCALL.find(x=>x.id===id)||{}).name)||id;
+function rttClass(l,v,relay){
+  if(v==null)return '';
+  const t=l.type, lim=(t==='roce'||t==='direct')?[3,10]:t==='lan'?[60,150]:[150,300];
+  return v>lim[1]?'bad':(v>lim[0]||relay)?'warn':'';
+}
+function rttTrend(l,v){ // strzałka trendu: porównanie of poprzednim odczytem starszym niż 5 min
+  try{
+    const store=JSON.parse(localStorage.getItem('mapa-rtt-trend')||'{}'),k=l.key+'#'+l.k,now=Date.now(),prev=store[k];
+    if(!(v==null)&&prev&&now-prev.t>5*60000&&prev.v!=null&&Math.abs(v-prev.v)>Math.max(2,prev.v*.2))
+      l.trend=v<prev.v?' ↓':' ↑';
+    store[k]={v,t:now};
+    const ks=Object.keys(store);if(ks.length>240)ks.sort((a,b)=>store[a].t-store[b].t).slice(0,ks.length-240).forEach(x=>delete store[x]);
+    localStorage.setItem('mapa-rtt-trend',JSON.stringify(store));
+  }catch(e){}
+}
+function applyLinks(){
+  links.forEach(l=>{
+    const m=LIVE&&LIVE.links&&LIVE.links[l.key]; let v=m&&m.rtt; if(Array.isArray(v))v=v[l.k];
+    l.trend='';
+    if(showRtt)rttTrend(l,v);
+    const txt=v==null?'':fmtMs(v)+l.trend+(m.relay?' · przez serwer '+String(m.region||'').toUpperCase():''), cls=rttClass(l,v,m&&m.relay);
+    l.rt.textContent=txt; l.rt.setAttribute('class','rtt '+cls); l.rt.style.display=(showRtt&&txt)?'':'none';
+    if(V3)V3.rttText(l,txt,cls);
+  });
+}
+function refreshNames(){
+  const P=LIVE&&LIVE.printer, pct=P&&P.state==='printing'?Math.round(P.progress*100):null;
+  N.forEach(n=>{n.disp=n.name+(n.id==='qidi'&&pct!=null?' · '+pct+'%':'');const t=n.el.querySelector('.nm');if(t)t.textContent=n.disp;if(V3)V3.rename(n)});
+}
+function printerBlock(){
+  const P=LIVE&&LIVE.printer; if(!P)return null;
+  const box=h('div',{class:'prn',id:'prn'}), pct=Math.round(P.progress*100);
+  box.append(h('div',{class:'sub'},'Drukarka'),h('div',{},(PSTATE[P.state]||P.state||'nieznany stan')+(P.file?' · '+P.file:'')));
+  if(P.state==='printing'||P.state==='paused'){
+    const bar=h('div',{class:'pbar',role:'progressbar','aria-valuenow':String(pct),'aria-valuemin':'0','aria-valuemax':'100'}), fill=h('i'); fill.style.width=pct+'%'; bar.append(fill);
+    box.append(bar,h('div',{class:'none'},pct+'% · elapsed '+fmtDur(P.elapsed)+(P.eta?' · left approx. '+fmtDur(P.eta):'')));
+  }
+  box.append(h('div',{class:'none'},'Dysza '+P.ext[0]+' / '+P.ext[1]+' °C · bed '+P.bed[0]+' / '+P.bed[1]+' °C'));
+  if(P.message)box.append(h('div',{class:'note'},P.message));
+  return box;
+}
+async function loadHist(){
+  if(!liveMode)return null;
+  if(HIST&&Date.now()-histT<45000)return HIST;
+  try{const r=await fetch('history.json',{cache:'no-store'});if(r.ok){HIST=await r.json();histT=Date.now()}}catch(e){}
+  return HIST;
+}
+function histBlock(id){
+  const it=HIST&&HIST.items[id]; if(!it)return null;
+  const box=h('div',{class:'hist',id:'hist'}), days=HIST.since?(HIST.ts-HIST.since)/86400:0;
+  box.append(h('div',{class:'sub'},'Availability'),
+    h('div',{},'24 h: '+(it.u24==null?'no data':it.u24+'%')+' · 7 days: '+it.u7+'%'+(days<7?' (data since '+fmtD(HIST.since)+')':'')));
+  const strip=h('div',{class:'strip',role:'img','aria-label':'Availability w ostatnich 24 godzinach'});
+  it.bars.forEach((v,k)=>{const c=v==null?'n':v>=.99?'u':v>0?'p':'d', i=h('i',{class:c});i.title=fmtT(HIST.ts-86400+k*1800)+(v==null?' no data':' · '+Math.round(v*100)+'%');strip.append(i)});
+  box.append(strip,h('div',{class:'strip-lbl'},'24 h ago → now'));
+  const o=it.out.slice(-3).reverse();
+  if(o.length){const ul=h('ul',{class:'fx'});o.forEach(([a,b])=>ul.append(h('li',{},b?fmtD(a)+' – '+fmtT(b)+' ('+fmtDur(b-a)+')':'since '+fmtD(a)+', ongoing')));box.append(h('div',{class:'sub'},'Recent outages'),ul)}
+  else box.append(h('div',{class:'none'},'No outages in the recorded period.'));
+  return box;
+}
+function histInto(id,my){loadHist().then(()=>{if(my!==renderSeq||sim.on||editing||panel.querySelector('#hist'))return;const b=histBlock(id);if(b)panel.append(b)})}
+function renderOutages(){
+  const sec=$('outsec'),box=$('outlist'); if(!HIST||!liveMode){sec.hidden=true;return}
+  const rows=[]; OUT_IDS.forEach(id=>{const it=HIST.items[id];if(it)it.out.forEach(([a,b])=>rows.push([id,a,b]))});
+  rows.sort((x,y)=>y[1]-x[1]); sec.hidden=false; box.replaceChildren();
+  if(!rows.length){box.append(h('p',{class:'none'},'Brak przerw w zapisanym okresie'+(HIST.since?' (since '+fmtD(HIST.since)+').':'.')));return}
+  rows.slice(0,8).forEach(([id,a,b])=>{const r=h('div',{class:'newrow'});r.append(h('span',{},nameOf(id)),h('span',{class:'mono'},b?fmtD(a)+' – '+fmtT(b):'since '+fmtD(a)),h('span',{class:'none'},b?fmtDur(b-a):'trwa'));box.append(r)});
+}
+// ----- selection, flows, exposure, failure simulation
+function select(id){
+  if(replay.on)return;
+  if(sim.on){if(!byId[id].svc)toggleDown(id);return}
+  const next=sel===id?null:id; resetModes('sel'); sel=next; paint(); if(V3)V3.focus(sel);
+  sel?renderNode(byId[sel]):showOverview(); updateFsTip();
+}
+function go(id){qres.hidden=true;if(sim.on)simToggle();if(sel!==id)select(id);else renderNode(byId[id])}
+function setFlow(f){
+  resetModes('flow'); flow=f; flowT=0; syncChips();
+  runner.setAttribute('visibility',f?'visible':'hidden'); if(V3){V3.runnerVisible(!!f);V3.focus(null)}
+  if(f){
+    if(!f.segs){f.segs=[];for(let i=0;i<f.path.length-1;i++){const a=f.path[i],b=f.path[i+1];const l=links.find(l=>isLink(l,a,b));f.segs.push({l,rev:l.a!==a})}
+      f.total=f.segs.reduce((s,x)=>s+x.l.len,0)}
+    const ol=h('ol',{class:'steps'});f.steps.forEach(s=>ol.append(h('li',{},s)));
+    panel.replaceChildren(h('h2',{},f.name),h('div',{class:'mono'},f.path.map(i=>byId[i].name).join(' → ')),ol);
+    placeRunner(0);
+  } else showOverview();
+  paint();
+}
+function placeRunner(dist){
+  let d=dist; for(const s of flow.segs){ if(d<=s.l.len){const f=s.rev?1-d/s.l.len:d/s.l.len;
+    if(view==='2d'){const p=s.l.path.getPointAtLength(f*s.l.len);runner.setAttribute('cx',p.x);runner.setAttribute('cy',p.y)}
+    if(V3)V3.runner(s.l,f);return} d-=s.l.len }
+}
+function setExpo(e){
+  resetModes('expo'); expo=e; syncChips(); if(V3)V3.focus(null);
+  if(e){const ul=h('ul',{class:'fx'});e.items.forEach(i=>ul.append(h('li',{},i)));panel.replaceChildren(h('h2',{},e.name),h('p',{},e.intro),ul)}
+  else showOverview();
+  paint();
+}
+function computeSim(){
+  const r=new Set();
+  if(!sim.down.has('mac')){r.add('mac');
+    const grow=useTs=>{let ch=true;while(ch){ch=false;links.forEach(l=>{if(l.type==='ts'&&!useTs)return;if(sim.down.has(l.a)||sim.down.has(l.b))return;if(r.has(l.a)!==r.has(l.b)){r.add(l.a);r.add(l.b);ch=true}})}};
+    grow(false); if(r.has('net'))grow(true)}
+  sim.reach=r;
+}
+function simEffects(){
+  const bad=id=>sim.down.has(id)||!sim.reach.has(id), out=[];
+  if(sim.down.has('mac'))return ['Everything running on the server: the assistant, Home Assistant, Vaultwarden, Jellyfin, invoicing and the Cloudflare tunnel.','The map loses its common node: the networks stop seeing each other.'];
+  FLOWS.forEach(f=>{if(f.path.some(bad))out.push('Flow „'+f.name+'”.')});
+  if(bad('gxa')||bad('gxb'))out.push(bad('api')?'The GLM model is down and the fallback bot has no cloud access either.':'The GLM model is down. The watchdog will alert; the fallback bot takes over.');
+  if(bad('net'))out.push('No internet: Telegram, mail, public *.example.com addresses and remote Tailscale access are down.');
+  else if(bad('cf'))out.push('Publiczne adresy apps.example.com.');
+  if(bad('hp')&&!bad('net'))out.push('ZTE network and the printer: hp-t630 is the only path into it.');
+  if(bad('router'))out.push('Home Assistant loses contact with home devices (Hue, dishwasher, purifier).');
+  return out;
+}
+function renderSim(){
+  panel.replaceChildren(h('h2',{},'Failure drill'),h('p',{},'Click a device on the map to switch it off. Click again to restore. This is a drill, nothing is really switched off.'));
+  if(!sim.down.size){panel.append(h('p',{class:'none'},'Nothing is switched off.'));return}
+  panel.append(h('div',{class:'sub'},'Switched off'));
+  const nb=h('div',{class:'nb'}); [...sim.down].forEach(i=>{const b=h('button',{class:'chip',type:'button'},byId[i].name+' ×');b.onclick=()=>toggleDown(i);nb.append(b)}); panel.append(nb);
+  const lost=N.filter(n=>!n.svc&&!sim.down.has(n.id)&&!sim.reach.has(n.id)).map(n=>n.name);
+  panel.append(h('div',{class:'sub'},'Unreachable from the server'),h('p',{id:'sim-lost'},lost.length?lost.join(', '):'Everything else is still reachable.'));
+  const fx=simEffects(); panel.append(h('div',{class:'sub'},'What stops working'));
+  if(fx.length){const ul=h('ul',{class:'fx',id:'sim-fx'});fx.forEach(t=>ul.append(h('li',{},t)));panel.append(ul)} else panel.append(h('p',{class:'none'},'None of the listed flows.'));
+  const rb=h('button',{class:'chip',type:'button',id:'sim-reset'},'Restore all'); rb.onclick=()=>{sim.down.clear();computeSim();applyStates();renderSim()}; panel.append(rb);
+}
+function toggleDown(id){sim.down.has(id)?sim.down.delete(id):sim.down.add(id);computeSim();applyStates();renderSim()}
+function simToggle(){
+  const on=!sim.on; resetModes('sim'); sim.on=on; if(on)computeSim();
+  applyStates(); syncChips(); if(V3)V3.focus(null); on?renderSim():showOverview(); paint(); updateFsTip();
+}
+// ----- controls
+const fb=$('filters');
+Object.entries(NETS).forEach(([k,v])=>{const b=h('button',{class:'chip',type:'button','aria-pressed':'false',id:'f-'+k});b.dataset.net=k;const d=h('span',{class:'dot'});d.style.background=v.col;b.append(d,v.name);
+  b.onclick=()=>{const next=filt===k?null:k;resetModes('filt');filt=next;syncChips();showOverview();paint()};fb.append(b)});
+const pb=h('button',{class:'chip',type:'button',id:'pause','aria-pressed':'false'},'Pause motion');
+pb.onclick=()=>{playing=!playing;pb.textContent=playing?'Pause motion':'Resume motion';pb.setAttribute('aria-pressed',String(!playing))};
+const simBtn=h('button',{class:'chip',type:'button',id:'sim','aria-pressed':'false'},'Failure drill'); simBtn.onclick=simToggle;
+const rttBtn=h('button',{class:'chip',type:'button',id:'rtt-btn','aria-pressed':'false'},'Latency'); rttBtn.hidden=true;
+rttBtn.onclick=()=>{showRtt=!showRtt;rttBtn.setAttribute('aria-pressed',String(showRtt));if(V3)V3.rtt(showRtt);applyLinks()};
+fb.append(pb,simBtn,rttBtn);
+// ----- podgląd stanu of przeszłości (replay of historii)
+const repBtn=h('button',{class:'chip',type:'button',id:'replay','aria-pressed':'false'},'Time travel');
+const replay={on:false,hours:6,data:null,timer:null};
+function renderReplay(){
+  const d=replay.data||{},down=Object.entries(d.d||{}).filter(([k,v])=>v===0&&byId[k]).map(([k])=>byId[k].name);
+  panel.replaceChildren(h('h2',{},'Time travel'),
+    h('p',{},d.t?'Saved state '+fmtD(d.t)+', i.e. approx. '+fmtDur(replay.hours*3600)+' ago.':'Brak zapisanej historii dla tego momentu.'));
+  const sl=h('input',{type:'range',min:'1',max:'168',value:String(replay.hours),id:'rep-slider','aria-label':'Ile godzin ago'});
+  const lbl=h('span',{id:'rep-lbl',class:'none'},'up to '+fmtDur(replay.hours*3600)+' ago');
+  sl.oninput=()=>{replay.hours=+sl.value;lbl.textContent='up to '+fmtDur(replay.hours*3600)+' ago';
+    clearTimeout(replay.timer);replay.timer=setTimeout(loadReplay,300)};
+  const row=h('div',{class:'acts'});row.append(sl,lbl);panel.append(row);
+  panel.append(h('div',{class:'sub'},'Not responding at that moment'));
+  if(down.length){const nb=h('div',{class:'nb'});down.forEach(nm=>nb.append(h('span',{class:'tag'},nm)));panel.append(nb)}
+  else panel.append(h('p',{class:'none'},'Everything monitored back then was responding.'));
+  const back=h('button',{class:'chip',type:'button',id:'rep-back'},'Back to now');back.onclick=replayToggle;panel.append(back);
+}
+function loadReplay(){
+  fetch('at?h='+replay.hours,{cache:'no-store'}).then(r=>r.json()).then(j=>{replay.data=j;applyStates();renderReplay();paint()}).catch(()=>{});
+}
+function replayToggle(){
+  replay.on=!replay.on;repBtn.setAttribute('aria-pressed',String(replay.on));
+  if(replay.on){sel=null;flow=null;expo=null;filt=null;sim.on=false;editing=false;syncChips();if(V3){V3.runnerVisible(false);V3.focus(null)}loadReplay()}
+  else{replay.data=null;applyStates();showOverview();paint();if(sel)renderNode(byId[sel])}
+  updateFsTip();
+}
+repBtn.onclick=replayToggle;fb.append(repBtn);
+const fl=$('flows');
+FLOWS.forEach(f=>{const b=h('button',{class:'chip',type:'button','aria-pressed':'false',id:'flow-'+f.id},f.name);b.dataset.id=f.id;b.onclick=()=>setFlow(flow===f?null:f);fl.append(b)});
+const xb=$('expos');
+EXPO.forEach(e=>{const b=h('button',{class:'chip',type:'button','aria-pressed':'false',id:'expo-'+e.id},e.name);b.dataset.id=e.id;b.onclick=()=>setExpo(expo===e?null:e);xb.append(b)});
+// search
+const q=h('input',{id:'q',type:'search',placeholder:'Search name or address','aria-label':'Search devices',autocomplete:'off'}), qres=$('qres');
+const matches=()=>{const t=q.value.trim().toLowerCase();if(!t)return null;
+  return N.filter(n=>[n.name,n.name0,n.ip,(NOTES[n.id]||{}).note||'',(n.facts||[]).map(f=>f[1]).join(' '),((LIVE&&LIVE.devices[n.id])||{}).vendor||''].join(' ').toLowerCase().includes(t)).slice(0,8)};
+q.addEventListener('input',()=>{const m=matches();qres.replaceChildren();qres.hidden=!m;if(!m)return;
+  qres.append(h('span',{class:'lbl'},'Results'));
+  if(!m.length)qres.append(h('span',{class:'none'},'No matching devices.'));
+  m.forEach(n=>{const b=h('button',{class:'chip',type:'button'},n.name);b.onclick=()=>go(n.id);qres.append(b)})});
+q.addEventListener('keydown',e=>{if(e.key==='Enter'){const m=matches();if(m&&m[0])go(m[0].id)}});
+// index
+const idx=$('idx');
+function buildIndex(){
+  idx.replaceChildren();
+  Object.entries(NETS).forEach(([k,v])=>{const s=h('section');const t=h('h3');const d=h('span',{class:'dot'});d.style.background=v.col;t.append(d,v.name);s.append(t);
+    N.filter(n=>n.g.includes(k)).forEach(n=>{const b=h('button',{type:'button'});b.append(h('span',{},n.name),h('span',{},k==='ts'&&n.id==='mac'?'100.118.235.98':k==='lan'&&n.id==='gxa'?'192.168.68.63':k==='lan'&&n.id==='gxb'?'192.168.68.59':k==='ai'&&n.id==='mac'?'10.55.0.1':k==='zte'&&n.id==='hp'?'192.168.0.2':n.ip));
+      b.onclick=()=>{go(n.id);document.querySelector('.stagecol').scrollIntoView({behavior:'smooth',block:'nearest'})};s.append(b)});
+    idx.append(s)});
+}
+
+// ---------- 3D ----------
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const C3={lan:0x35c9bd,ai:0xf07fb0,direct:0xf0b545,roce:0xf07fb0,ts:0xa394ff,zte:0x9bd46a,wan:0x8fb0d1,net:0x8fb0d1};
+const LEVEL={net:16,lan:0,ai:6,ts:-9,zte:-19};
+const ZR={net:[20,14,960,96],lan:[20,128,610,350],ai:[650,128,330,350],ts:[20,496,960,138],zte:[20,646,960,112]};
+// polar layout on one matte slab: [radius, angle°]; angle 0 = right, 90 = towards the viewer. Internet sits on a small separate slab.
+const POS3={mac:[0,0],gxa:[19,-14],gxb:[33,-14],
+  tsi:[23,128],hp:[23,90],mmw:[23,52],zte:[37,104],qidi:[37,76],
+  router:[17,238],hue:[35,155],tahoma:[35,174],lex:[35,193],tv:[35,212],bosch:[35,231],unk:[35,250],xi1:[35,269],xi2:[35,288],iph:[35,307],priv:[35,326],
+  net:[65,238],cf:[66,228],api:[66,248],
+  's-hermes':[8,150],'s-ha':[8,172],'s-vw':[8,194],'s-jf':[8,216],'s-ksef':[8,260],'s-cloud':[8,282],'s-tr':[8,304],'s-cf':[8,326]};
+const CAMS={all:{p:[-37,78,125],t:[-10,0,-13]},top:{p:[-10,205,-12.8],t:[-10,0,-13]},mac:{p:[-9,19,25],t:[0,0,0]},ai:{p:[36,24,28],t:[25,0,-6]},zte:{p:[-8,24,70],t:[-1,0,33]},net:{p:[-52,26,-18],t:[-34,0,-55]}};
+const SECT=[['lan',148,332],['ai',-40,12],['ts',40,60],['ts',120,140],['zte',62,118]];
+const ZLAB={lan:[50,196],ai:[51,-14],ts:[51,132],zte:[51,90],net:[84,238]};
+const PAL={light:{slab:0xdfe3e9,side:0xbfc5ce,body:0xffffff,guess:0xc9ced6,line:0x8a94a3,run:0x18202b,offb:0x9aa2ad,bad:0xc23b3b,ok:0x2a8a55,net:{lan:0x0c8f86,ai:0xc2487f,roce:0xc2487f,direct:0xb9770a,ts:0x6a55d6,zte:0x4a8527,wan:0x52708f,net:0x52708f}},
+           dark:{slab:0x2b3038,side:0x1d2127,body:0xd9dee6,guess:0x7b8492,line:0x7d8796,run:0xffffff,offb:0x4d545f,bad:0xff7b7b,ok:0x5fd08a,net:{lan:0x35c9bd,ai:0xf07fb0,roce:0xf07fb0,direct:0xf0b545,ts:0xa394ff,zte:0x9bd46a,wan:0x8fb0d1,net:0x8fb0d1}}};
+function init3d(){
+  if(!window.THREE||!THREE.OrbitControls)return null;
+  const host=document.getElementById('stage3d'), lab=document.getElementById('labels');
+  let renderer; try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:true})}catch(e){return null}
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  const cv=renderer.domElement; host.prepend(cv);
+  const scene=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(30,1.6,1,900); cam.position.set(-37,78,125);
+  const home=new THREE.Vector3(-10,0,-13);
+  const ctl=new THREE.OrbitControls(cam,cv); ctl.enableDamping=true; ctl.dampingFactor=.08; ctl.target.copy(home);
+  ctl.maxPolarAngle=1.45; ctl.minDistance=30; ctl.maxDistance=260;
+  const rad=d=>d*Math.PI/180;
+  const PP=([r,a],y)=>new THREE.Vector3(r*Math.cos(rad(a)),y||0,r*Math.sin(rad(a)));
+  const hemi=new THREE.HemisphereLight(0xffffff,0x9aa3b0,.75); scene.add(hemi);
+  const sun=new THREE.DirectionalLight(0xffffff,.7); sun.position.set(-40,90,50); sun.castShadow=true;
+  sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-90,right:90,top:90,bottom:-90,near:10,far:260}); sun.shadow.radius=4; sun.shadow.bias=-.0005; scene.add(sun);
+  const themed=[]; // [material, palette key or fn]
+  const M=(key,opt)=>{const m=new THREE.MeshStandardMaterial(Object.assign({roughness:.78,metalness:0,transparent:true},opt||{}));m.userData.key=key;themed.push(m);return m};
+  const flat=m=>{m.rotation.x=-Math.PI/2;return m};
+  // slabs
+  const slab=(r,pos)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,1.2,128),[M('side'),M('slab'),M('side')]);m.position.copy(pos).y=-.6;m.receiveShadow=true;scene.add(m);return m};
+  slab(46,new THREE.Vector3()); slab(16,PP(POS3.net));
+  [8,17,23,35].forEach(r=>{const m=flat(new THREE.Mesh(new THREE.RingGeometry(r-.035,r+.035,160),M('line',{opacity:.22,depthWrite:false})));m.position.y=.02;scene.add(m)});
+  SECT.forEach(([k,a0,a1])=>{const arc=flat(new THREE.Mesh(new THREE.RingGeometry(44.4,45,96,1,rad(-a1),rad(a1-a0)),M('net.'+k,{depthWrite:false})));arc.position.y=.03;scene.add(arc)});
+  {const c=PP(POS3.net),arc=flat(new THREE.Mesh(new THREE.RingGeometry(14.9,15.5,96),M('net.net',{depthWrite:false})));arc.position.set(c.x,.03,c.z);scene.add(arc)}
+  const mkLabel=(html,cls)=>{const d=document.createElement('div');d.className='l3 '+(cls||'');d.innerHTML=html;lab.appendChild(d);return d};
+  const setLabel=(d,n)=>{d.textContent=n.disp||n.name;const sm=document.createElement('small');sm.textContent=n.ip;d.appendChild(sm)};
+  const zl=Object.entries(ZLAB).map(([k,p])=>{const d=mkLabel(NETS[k].name,'z');d.style.color=NETS[k].col;return {d,pos:PP(p,.5)}});
+  // miniature devices: [parts, height]; a part is [geometry, x,y,z, rotX]
+  const B=(w,h,d)=>new THREE.BoxGeometry(w,h,d), CY=(r,h)=>new THREE.CylinderGeometry(r,r,h,40);
+  const SHAPE={
+    computer:()=>[[[B(3.6,1,3.6),0,.5,0]],1],
+    server:()=>[[[B(3,1.5,3),0,.75,0],[B(2.2,.06,.3),0,1.0,1.52]],1.5],
+    router:()=>[[[B(3.2,.7,2),0,.35,0],[CY(.07,1.8),-1.2,1.5,-.7],[CY(.07,1.8),1.2,1.5,-.7]],2.4],
+    phone:()=>[[[B(1.3,2.6,.16),0,1.35,0,-.22]],2.7],
+    tv:()=>[[[B(4.2,2.4,.14),0,1.6,0],[B(.3,.5,.3),0,.25,0],[B(1.6,.1,.9),0,.05,0]],2.8],
+    printer:()=>[[[B(3,1.5,2.6),0,.75,0],[B(2.3,.5,1.7),0,1.75,-.2],[B(2,.08,1),0,.5,1.7]],2],
+    bulb:()=>[[[CY(1.25,.55),0,.28,0]],.6],
+    appliance:()=>[[[B(2.4,3,2.4),0,1.5,0],[B(2.4,.06,.1),0,2.5,1.22]],3],
+    air:()=>[[[CY(1.05,3),0,1.5,0],[CY(.8,.08),0,3.04,0]],3.1],
+    cloud:()=>[[[new THREE.SphereGeometry(1.5,40,28),0,1.5,0]],3],
+    unknown:()=>[[[B(1.7,1.7,1.7),0,.85,0]],1.7],
+    svc:()=>[[[CY(1.2,2.2),0,1.1,0]],2.2]};
+  const picks=[], baseGeo=new THREE.CylinderGeometry(2.6,2.6,.14,64);
+  N.forEach(n=>{
+    const zone=n.g[0], pos=PP(POS3[n.id]), sc=n.hub?1.5:n.svc?.5:1, grp=new THREE.Group(); grp.position.copy(pos);
+    const body=M(n.guess?'guess':'body',{roughness:.55}), bmat=M(n.svc?'line':'net.'+zone,{roughness:.6});
+    const [parts,hh]=SHAPE[n.kind]();
+    parts.forEach(([g,x,y,z,rx])=>{const m=new THREE.Mesh(g,body);m.position.set(x,y+.14,z);if(rx)m.rotation.x=rx;m.castShadow=true;m.receiveShadow=true;grp.add(m)});
+    const base=new THREE.Mesh(baseGeo,bmat); base.position.y=.07; base.receiveShadow=true; grp.add(base);
+    grp.rotation.y=Math.atan2(cam.position.x-pos.x,cam.position.z-pos.z)*.5; // turn the miniatures a little towards the opening view
+    const pick=new THREE.Mesh(new THREE.SphereGeometry(3,8,6),new THREE.MeshBasicMaterial({visible:false})); pick.position.y=1.2; pick.userData.id=n.id; grp.add(pick); picks.push(pick);
+    grp.scale.setScalar(sc); scene.add(grp);
+    n.t3={grp,body,bmat,base:sc,pos,anchor:pos.clone().add(new THREE.Vector3(0,(hh+1.5)*sc,0)),label:mkLabel('',n.svc?'s':'')}; setLabel(n.t3.label,n);
+  });
+  // cables
+  const seen={}, beadGeo=new THREE.SphereGeometry(.3,16,12);
+  links.forEach(l=>{
+    const A=byId[l.a].t3.pos.clone(), Bp=byId[l.b].t3.pos.clone(); A.y=Bp.y=.5;
+    const mid=A.clone().add(Bp).multiplyScalar(.5), dist=A.distanceTo(Bp), key=l.a+'|'+l.b, k=seen[key]=(seen[key]||0)+1;
+    mid.y=.5+Math.max(1.6,dist*.14);
+    if(Math.hypot(mid.x,mid.z)<12&&l.a!=='mac'&&l.b!=='mac')mid.y+=7;
+    if(l.type==='roce')mid.add(new THREE.Vector3(Bp.z-A.z,0,A.x-Bp.x).normalize().multiplyScalar(k===1?3.5:-3.5));
+    const curve=new THREE.QuadraticBezierCurve3(A,mid,Bp), r=l.type==='roce'?.14:l.type==='direct'?.13:l.type==='wan'?.1:.055;
+    const mat=M('net.'+l.type,{roughness:.6});
+    const tube=new THREE.Mesh(new THREE.TubeGeometry(curve,56,r,10),mat); tube.castShadow=l.type!=='lan'; scene.add(tube);
+    const bmat=M('net.'+l.type,{roughness:.4});
+    const spr=l.pk.map(()=>{const b=new THREE.Mesh(beadGeo,bmat);if(l.type==='roce'||l.type==='direct')b.scale.setScalar(1.25);scene.add(b);return b});
+    const dash=new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(70)),new THREE.LineDashedMaterial({dashSize:.55,gapSize:.75,transparent:true}));
+    dash.computeLineDistances(); dash.visible=false; dash.material.userData.key='net.'+l.type; themed.push(dash.material); scene.add(dash);
+    const rl=mkLabel('','rl'); rl.style.display='none';
+    l.c3={curve,mat,bmat,spr,tube,dash,rl};
+  });
+  const run=new THREE.Mesh(new THREE.SphereGeometry(.85,24,16),M('run',{roughness:.3})); run.visible=false; run.castShadow=true; scene.add(run);
+  function applyTheme(){
+    const bg=getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), dark=parseInt(bg.slice(1,3),16)<128, P=PAL[dark?'dark':'light'];
+    themed.forEach(m=>{const key=m.userData.key;m.color.setHex(key.startsWith('net.')?P.net[key.slice(4)]:P[key])});
+    hemi.intensity=dark?.55:.7; hemi.groundColor.setHex(dark?0x15181d:0xb9c0cb); sun.intensity=dark?.75:.85;
+  }
+  applyTheme();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
+  new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  let focusT=null, goal=null, rttOn=false; const v=new THREE.Vector3();
+  ctl.addEventListener('start',()=>{goal=null});
+  function resize(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);cam.aspect=w/h;cam.fov=w/h<1?46:30;cam.updateProjectionMatrix()}
+  if(window.ResizeObserver)new ResizeObserver(resize).observe(host); else addEventListener('resize',resize);
+  function putLabel(d,pos,w,h){v.copy(pos).project(cam);const ok=v.z<1&&v.z>-1;d.style.visibility=ok?'visible':'hidden';if(ok)d.style.transform='translate('+((v.x+1)/2*w).toFixed(1)+'px,'+((1-v.y)/2*h).toFixed(1)+'px) translate(-50%,-100%)'}
+  const ray=new THREE.Raycaster(), m2=new THREE.Vector2(); let down=null;
+  const hit=e=>{const r=cv.getBoundingClientRect();m2.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height*2-1));ray.setFromCamera(m2,cam);const x=ray.intersectObjects(picks,false);return x.length?x[0].object.userData.id:null};
+  cv.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY]});
+  cv.addEventListener('pointerup',e=>{if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<6){const id=hit(e);if(id)select(id)}down=null});
+  cv.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'||e.buttons)return;const id=hit(e);cv.classList.toggle('pt',!!id);if(id!==hover){hover=id;paint()}});
+  cv.addEventListener('pointerleave',()=>{if(hover){hover=null;paint()}});
+  return {
+    resize,
+    paint(hotN,hotL,dim){
+      N.forEach(n=>{const o=n.t3,hot=!dim||hotN.has(n.id);o.body.opacity=hot?1:.18;o.bmat.opacity=hot?1:.18;o.label.classList.toggle('dim',!hot);o.label.classList.toggle('on',dim&&hot&&(!n.svc||n.id===sel||n.id===hover));o.target=o.base*(n.id===sel?1.3:1)});
+      links.forEach(l=>{const hot=hotL.has(l)||!dim;l.c3.mat.opacity=hot?1:.1;l.c3.dash.material.opacity=hot?1:.15;l.c3.bmat.opacity=hot?1:.08});
+    },
+    focus(id){
+      if(id&&byId[id]&&byId[id].t3){ // dojazd kamery: przybliż i wycentruj na urządzeniu
+        const p=byId[id].t3.pos.clone(),dir=cam.position.clone().sub(ctl.target).normalize(),d=Math.min(Math.max(cam.position.distanceTo(ctl.target),36),80);
+        goal={p:p.clone().add(dir.multiplyScalar(d)),t:p};focusT=null;
+      } else {goal=null;focusT=home}
+    },
+    states(){N.forEach(n=>{const o=n.t3,st=n.state||'ok';o.body.userData.key=st==='down'?'bad':st==='off'?'offb':n.guess?'guess':'body';
+      if(n.svc)o.bmat.userData.key=(!LIVE&&!sim.on)?'line':st==='ok'?'ok':'bad';o.label.classList.toggle('off',st!=='ok')});applyTheme()},
+    rename(n){setLabel(n.t3.label,n)},
+    rtt(on){rttOn=on;links.forEach(l=>{l.c3.rl.style.display=on?'':'none'})},
+    rttText(l,t,cls){l.c3.rl.textContent=t;l.c3.rl.className='l3 rl '+(cls||'')+(rttOn&&t?'':' hid');l.c3.rl.style.display=(rttOn&&t)?'':'none'},
+    conn(l,wifi){l.c3.tube.visible=!wifi;l.c3.dash.visible=wifi},
+    view(k){const c=CAMS[k];focusT=null;goal={p:new THREE.Vector3(c.p[0],c.p[1],c.p[2]),t:new THREE.Vector3(c.t[0],c.t[1],c.t[2])}},
+    runnerVisible(on){run.visible=on},
+    screenPos(id){const n=byId[id];if(!n||!n.t3)return null;v.copy(n.t3.anchor).project(cam);if(v.z<=-1||v.z>=1)return null;const w=host.clientWidth,h=host.clientHeight;return{x:(v.x+1)/2*w,y:(1-v.y)/2*h}},
+    snapshot(){renderer.render(scene,cam);return renderer.domElement.toDataURL('image/png')},
+    runner(l,f){run.position.copy(l.c3.curve.getPoint(f))},
+    frame(dt,t,play){
+      if(play)links.forEach(l=>l.pk.forEach((p,j)=>{let u=(t*l.speed/l.len+p.off)%1;if(p.dir<0)u=1-u;l.c3.spr[j].position.copy(l.c3.curve.getPoint(u))}));
+      N.forEach(n=>{const o=n.t3,s=o.grp.scale.x;if(o.target&&Math.abs(s-o.target)>.002)o.grp.scale.setScalar(s+(o.target-s)*.15)});
+      if(focusT){ctl.target.lerp(focusT,.07);if(ctl.target.distanceTo(focusT)<.05)focusT=null}
+      if(goal){cam.position.lerp(goal.p,.09);ctl.target.lerp(goal.t,.09);if(cam.position.distanceTo(goal.p)<.15)goal=null}
+      ctl.update(); renderer.render(scene,cam);
+      const w=host.clientWidth,h=host.clientHeight; N.forEach(n=>putLabel(n.t3.label,n.t3.anchor,w,h)); zl.forEach(z=>putLabel(z.d,z.pos,w,h));
+      if(rttOn)links.forEach(l=>{if(l.c3.rl.style.display!=='none')putLabel(l.c3.rl,l.c3.curve.getPoint(.5),w,h)});
+      if(sel&&view==='3d'&&fsTip.classList.contains('on'))fsTipPos();
+    }
+  };
+}
+// ---------- loop + views ----------
+let last=0, t=0;
+function place(){links.forEach(l=>l.pk.forEach(p=>{let u=(t*l.speed/l.len+p.off)%1;if(p.dir<0)u=1-u;const pt=l.path.getPointAtLength(u*l.len);p.e.setAttribute('cx',pt.x);p.e.setAttribute('cy',pt.y)}))}
+function tick(ts){
+  const dt=last?Math.min(.05,(ts-last)/1000):0; last=ts;
+  if(playing){t+=dt; if(view==='2d')place(); if(flow){flowT=(flowT+dt*190)%(flow.total+120);placeRunner(Math.min(flowT,flow.total))}}
+  if(V3&&view==='3d')V3.frame(dt,t,playing);
+  requestAnimationFrame(tick);
+}
+showOverview(); place();
+try{V3=init3d()}catch(e){V3=null}
+paint();
+const vb=document.getElementById('views'), s3=document.getElementById('stage3d'), s2=document.getElementById('stage2d');
+function setView(v){
+  if(v==='3d'&&!V3)v='2d'; view=v; s3.hidden=v!=='3d'; s2.hidden=v!=='2d';
+  vb.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
+  if(v==='2d'){place();if(flow)placeRunner(Math.min(flowT,flow.total))} else V3.resize();
+  const pb2=document.getElementById('png');if(pb2)pb2.hidden=v!=='3d';
+}
+[['3d','3D'],['2d','2D schematic']].forEach(([k,n])=>{const b=h('button',{class:'chip',type:'button','aria-pressed':'false',id:'view-'+k},n);b.dataset.v=k;b.onclick=()=>{location.hash=k;setView(k)};vb.append(b)});
+vb.querySelectorAll('button').forEach(b=>{b.hidden=!V3});
+if(V3){const cb=document.getElementById('cams');[['all','Overview'],['top','Top down'],['mac','Home server'],['ai','AI cluster'],['zte','ZTE network'],['net','Internet']].forEach(([k,n])=>{const b=h('button',{type:'button',id:'cam-'+k},n);b.onclick=()=>V3.view(k);cb.append(b)})}
+vb.append(q);
+const fsTarget=document.querySelector('.stagecol');
+const fsBtn=h('button',{class:'chip',type:'button',id:'fs','aria-pressed':'false'},'Fullscreen map');
+const pngBtn=h('button',{class:'chip',type:'button',id:'png',title:'Save widok 3D mapy jako obraz PNG'},'PNG snapshot');
+pngBtn.onclick=()=>{if(view!=='3d'||!V3)return;const a=document.createElement('a');a.download='netglass.png';a.href=V3.snapshot();document.body.append(a);a.click();a.remove()};
+fsBtn.onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else fsTarget.requestFullscreen().catch(()=>{})};
+addEventListener('keydown',e=>{if((e.key==='f'||e.key==='F')&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&e.target===document.body){e.preventDefault();fsBtn.click()}});
+const fsx=h('button',{class:'chip',type:'button',id:'fsx'},'✕ Zamknij');
+fsx.onclick=()=>document.exitFullscreen();
+fsTarget.append(fsx);
+const thBtn=h('button',{class:'chip',type:'button',id:'theme','aria-pressed':'false'});
+const sysDark=()=>matchMedia('(prefers-color-scheme: dark)').matches;
+const isDark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':sysDark()};
+function syncTheme(){thBtn.textContent=isDark()?'☀ Light':'☾ Dark';thBtn.setAttribute('aria-pressed',String(isDark()))}
+thBtn.onclick=()=>{const nd=isDark()?'light':'dark';document.documentElement.dataset.theme=nd;try{localStorage.setItem('mapa-theme',nd)}catch(e){};syncTheme()};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',syncTheme);syncTheme();
+vb.append(thBtn);
+// chmurka of details urządzenia w trybie pełnoekranowym
+const fsTip=h('div',{id:'fsTip','aria-live':'polite'});
+fsTarget.append(fsTip);
+const fsTipX=h('button',{class:'chip fsT-close',type:'button','aria-label':'Close bubble'},'✕');
+fsTipX.onclick=()=>{if(sel)select(null);else updateFsTip()};
+function fsTipAt(x,y,ax){
+  fsTip.classList.add('on');
+  fsTip.style.left='0px';fsTip.style.top='0px';
+  const r=fsTip.getBoundingClientRect(),host=fsTarget.getBoundingClientRect();
+  if(ax!=null&&x+r.width>host.width-10&&ax-r.width-18>10)x=ax-r.width-18; // przy prawej krawędzi: po drugiej stronie punktu
+  x=Math.max(10,Math.min(x,host.width-r.width-10));y=Math.max(10,Math.min(y,host.height-r.height-10));
+  fsTip.style.left=x+'px';fsTip.style.top=y+'px';
+}
+function fsTipAnchor(){if(view!=='3d'||!V3||!sel)return null;return V3.screenPos(sel)}
+function fsTipPos(){const a=fsTipAnchor();if(!a||!fsTip.classList.contains('on'))return;fsTipAt(a.x+18,a.y-14,a.x)}
+function fsTipRow(k,v,mono){const r=h('div',{class:'fsT-row'});r.append(h('span',{class:'fsT-k'},k));if(v instanceof Node)r.append(v);else r.append(h('span',{class:'fsT-v'+(mono?' mono':'')},String(v)));return r}
+function relSeen(ts){const now=LIVE?LIVE.ts:Date.now()/1e3,s=now-ts;if(s<90)return'just now';if(s<3600)return Math.max(1,Math.round(s/60))+' min ago';if(s<86400)return Math.round(s/3600)+' h ago';return new Date(ts*1e3).toLocaleString('pl-PL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+function updateFsTip(){
+  const active=document.fullscreenElement===fsTarget&&sel&&!sim.on&&!replay.on&&byId[sel];
+  if(!active){fsTip.classList.remove('on');return}
+  const n=byId[sel],note=NOTES[n.id]||{};
+  const d=LIVE&&!sim.on?(n.svc?LIVE.services[n.id]:LIVE.devices[n.id]):null;
+  fsTip.replaceChildren(h('p',{class:'fsT-name'},n.name));
+  const rows=h('div',{class:'fsT-rows'});
+  if(d&&d.up!==undefined){const st=h('span',{class:'fsT-v'},d.up?'OK':'Nie respond');st.style.color=d.up?'var(--ok)':'var(--bad)';st.style.fontWeight='600';rows.append(fsTipRow('Status',st))}
+  if(d&&d.ips&&d.ips.length)rows.append(fsTipRow('IP',d.ips.join(', '),1));
+  else if(n.ip)rows.append(fsTipRow('IP',n.ip,1));
+  if(d&&d.mac)rows.append(fsTipRow('MAC',d.mac,1));
+  if(d&&d.vendor)rows.append(fsTipRow('Vendor',d.vendor));
+  if(d&&d.name)rows.append(fsTipRow('mDNS name',d.name));
+  const conn=CONN_TXT[n.conn]||CONN_TXT[CONN0[n.id]];if(conn&&!n.svc)rows.append(fsTipRow('Link',conn));
+  if(d&&d.rtt!=null)rows.append(fsTipRow('Latency',fmtMs(d.rtt)+' from the server'));
+  if(d&&d.last_seen){const rel=relSeen(d.last_seen);if(rel)rows.append(fsTipRow('Last seen',rel))}
+  if(n.guess)rows.append(fsTipRow('Matched','by MAC only'));
+  if(note.note)rows.append(fsTipRow('Notatka',note.note));
+  if(rows.children.length)fsTip.append(rows);
+  const it=HIST&&HIST.items[n.id]; // dostępność 24 h + ostatnia przerwa
+  if(it&&it.bars){
+    const strip=h('div',{class:'strip',role:'img','aria-label':'Availability w ostatnich 24 godzinach'});
+    it.bars.forEach((v,k)=>{const c=v==null?'n':v>=.99?'u':v>0?'p':'d',i=h('i',{class:c});i.title=fmtT(HIST.ts-86400+k*1800)+(v==null?' no data':' · '+Math.round(v*100)+'%');strip.append(i)});
+    fsTip.append(strip,h('div',{class:'strip-lbl'},'24 h uptime: '+(it.u24==null?'no data':it.u24+'%')));
+    const o=it.out.slice(-1)[0];
+    if(o)fsTip.append(h('div',{class:'none'},'Last outage: '+(o[1]?fmtD(o[0])+' – '+fmtT(o[1])+' ('+fmtDur(o[1]-o[0])+')':'since '+fmtD(o[0])+', ongoing')));
+  }
+  if(d&&d.mac&&!d.up&&!d.never){ // WoL prosto of chmurki
+    const wb=h('button',{class:'chip',type:'button',id:'fs-wol'},'Wake (WoL)');
+    wb.onclick=async()=>{wb.disabled=true;wb.textContent='Sending magic…';
+      try{const r=await fetch('wol',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:n.id})});wb.textContent=r.ok?'Sent ✓':'Error'}catch(e){wb.textContent='Error'}};
+    fsTip.append(wb);
+  }
+  fsTip.append(fsTipX);
+  const a=fsTipAnchor();
+  if(a){fsTipAt(a.x+18,a.y-14,a.x);return}
+  let x=70,y=64; // domyślnie psince przyciskiem zamknięcia (widok 3D bez rzutu)
+  if(view==='2d'&&!s2.hidden){
+    try{const pt=svg.createSVGPoint();pt.x=n.x;pt.y=n.y;const m=svg.getScreenCTM();
+      if(m){const q=pt.matrixTransform(m);const host=fsTarget.getBoundingClientRect();x=q.x-host.left+16;y=q.y-host.top+16}}catch(e){}
+  }
+  fsTipAt(x,y);
+}
+document.addEventListener('fullscreenchange',()=>{const on=!!document.fullscreenElement;fsBtn.textContent=on?'Exit fullscreen':'Fullscreen map';fsBtn.setAttribute('aria-pressed',on);updateFsTip()});
+vb.append(fsBtn,pngBtn);
+try{NOTES=JSON.parse(localStorage.getItem('mapa-notatki')||'{}')||{}}catch(e){NOTES={}}
+applyNotes(); applyStates(); loadLive();
+const fromHash=()=>setView(location.hash==='#2d'?'2d':'3d');
+addEventListener('hashchange',fromHash); fromHash();
+if(reduced){playing=false;pb.textContent='Resume motion';pb.setAttribute('aria-pressed','true')}
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)&&location.hostname!=='localhost')navigator.serviceWorker.register('sw.js').catch(()=>{});
+requestAnimationFrame(tick);
+</script>

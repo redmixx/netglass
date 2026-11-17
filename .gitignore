@@ -1,0 +1,10 @@
+config.json
+state.json
+status.json
+history.jsonl
+notes.json
+assignments.json
+*.log
+__pycache__/
+translate*.py
+.DS_Store

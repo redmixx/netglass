@@ -1,0 +1,38 @@
+{
+  "_comment": "netglass configuration. Copy to config.json and adjust. Device ids must match the topology in web/index.html.",
+  "port": 8790,
+  "interval_s": 120,
+  "history_days": 7,
+  "alert_after_s": 300,
+  "lan_presence_window_s": 600,
+
+  "lan_cidrs": ["192.168.1.0/24"],
+  "wol_broadcast": ["192.168.1.255"],
+  "ping_targets": {"internet": "1.1.1.1"},
+  "always_up": ["self"],
+  "smoothed_devices": ["router", "phone", "laptop", "tv"],
+
+  "device_ids": ["router", "self", "phone", "laptop", "tv", "nas", "printer", "iot", "net"],
+  "labels": {"router": "Router", "self": "This server", "phone": "Phone", "laptop": "Laptop", "tv": "TV", "nas": "NAS", "printer": "Printer", "iot": "IoT", "net": "Internet"},
+
+  "known_macs": {},
+  "link_rtts": [
+    {"key": "net|router", "device": "internet"},
+    {"key": "router|self", "device": "router"}
+  ],
+
+  "tcp_services": [
+    {"id": "s-ssh", "host": "127.0.0.1", "port": 22}
+  ],
+  "tailscale_ips": {},
+  "ha_device_registry": null,
+  "moonraker": null,
+  "roce_ssh_host": null,
+
+  "alerting": {
+    "macos_notifications": true,
+    "telegram_token": null,
+    "telegram_chat": null,
+    "webhook": null
+  }
+}
