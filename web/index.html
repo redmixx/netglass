@@ -226,10 +226,10 @@ input#q:focus{outline:none;border-color:color-mix(in srgb,var(--ts) 55%,transpar
 <script>
 const NETS={
   net:{name:'Internet & cloud',col:'var(--wan)',sub:'services away from home'},
-  lan:{name:'Home LAN',col:'var(--lan)',sub:'192.168.68.0/22 · brama 192.168.68.1'},
-  ai:{name:'AI cluster',col:'var(--ai)',sub:'10.55.0.0/30 + 2 × RoCE'},
+  lan:{name:'Home LAN',col:'var(--lan)',sub:'192.168.30.0/22 · brama 192.168.30.1'},
+  ai:{name:'AI cluster',col:'var(--ai)',sub:'10.0.0.0/30 + 2 × RoCE'},
   ts:{name:'Tailscale',col:'var(--ts)',sub:'tail84733f.ts.net · 100.x'},
-  zte:{name:'Second LAN (ZTE)',col:'var(--zte)',sub:'192.168.0.0/24 · reachable via Tailscale'}
+  zte:{name:'Second LAN (ZTE)',col:'var(--zte)',sub:'192.168.8.0/24 · reachable via Tailscale'}
 };
 const ICON={
   router:'M4 14h16v5H4z M8 14V9 M16 14V9 M7.5 16.5h.01',
@@ -254,52 +254,52 @@ const N=[
  {id:'api',name:'Cloud model APIs',ip:'DeepSeek · Claude',kind:'cloud',x:800,y:58,g:['net'],
   desc:'Cloud models: a paid LLM API for the fallback bot and Claude Sonnet for the screen subagent.',
   facts:[['fallback','Cloud LLM (paid API)'],['screen','Claude Sonnet (subscription)']]},
- {id:'router',name:'Router',ip:'192.168.68.1',kind:'router',x:325,y:190,g:['lan'],
-  desc:'Home LAN gateway and the way out to the internet. The MAC points to TP-Link; the 192.168.68.x addressing is typical for a Deco setup.',
-  facts:[['Subnets','192.168.68.0/22'],['Vendor','TP-Link (wg MAC)']]},
- {id:'hue',name:'Mostek Hue',ip:'192.168.68.52',kind:'bulb',x:60,y:300,g:['lan'],
+ {id:'router',name:'Router',ip:'192.168.30.1',kind:'router',x:325,y:190,g:['lan'],
+  desc:'Home LAN gateway and the way out to the internet. The MAC points to TP-Link; typical consumer mesh addressing.',
+  facts:[['Subnets','192.168.30.0/22'],['Vendor','TP-Link (wg MAC)']]},
+ {id:'hue',name:'Mostek Hue',ip:'192.168.30.52',kind:'bulb',x:60,y:300,g:['lan'],
   desc:'Philips Hue Bridge (C644E5). Drives the lighting, visible to Home Assistant.'},
  {id:'tahoma',name:'TaHoma Switch',ip:'adres nieustalony',kind:'router',x:168,y:300,g:['lan'],guess:1,
   desc:'A Somfy TaHoma Switch hub driving seven blinds over io-homecontrol radio. Home Assistant reaches it via the Somfy cloud, so it does not know its IP. The MAC is not assigned yet: pick the right address in the unknown-devices section at the bottom.',
   facts:[['Rolety','Okno Tosia, Sypialnia, Salon 1–3, Okno biuro, Drzwi balkonowe'],['Home Assistant','integracja Overkiz (chmura Somfy)']]},
- {id:'lex',name:'Lexmark MC3224dwe',ip:'192.168.68.58',kind:'printer',x:276,y:300,g:['lan'],
+ {id:'lex',name:'Lexmark MC3224dwe',ip:'192.168.30.58',kind:'printer',x:276,y:300,g:['lan'],
   desc:'Drukarka wielofunkcyjna: druk (IPP), skaner, panel WWW na porcie 80.'},
- {id:'tv',name:'Telewizor Samsung',ip:'192.168.68.60 · .66',kind:'tv',x:384,y:300,g:['lan'],
+ {id:'tv',name:'Telewizor Samsung',ip:'192.168.30.60 · .66',kind:'tv',x:384,y:300,g:['lan'],
   desc:'A TV with AirPlay. The same MAC shows up under two IPs.'},
- {id:'bosch',name:'Zmywarka Bosch',ip:'192.168.68.53',kind:'appliance',x:492,y:300,g:['lan'],
+ {id:'bosch',name:'Zmywarka Bosch',ip:'192.168.30.53',kind:'appliance',x:492,y:300,g:['lan'],
   desc:'Bosch SMV4HVX37E dishwasher (Home Connect). The MAC belongs to BSH, so the .53 assignment is certain.'},
- {id:'unk',name:'Xiaomi',ip:'192.168.68.67',kind:'air',x:600,y:300,g:['lan'],guess:1,
+ {id:'unk',name:'Xiaomi',ip:'192.168.30.67',kind:'air',x:600,y:300,g:['lan'],guess:1,
   desc:'A Xiaomi device (Xiaomi vendor MAC); the Xiaomi Home integration runs in Home Assistant. Which of the three (.50, .51, .67) is the air purifier, I cannot tell from here.'},
- {id:'xi1',name:'Xiaomi',ip:'192.168.68.50',kind:'air',x:60,y:410,g:['lan'],guess:1,
+ {id:'xi1',name:'Xiaomi',ip:'192.168.30.50',kind:'air',x:60,y:410,g:['lan'],guess:1,
   desc:'A Xiaomi device (per MAC). One of the three (.50, .51, .67) is a Mi Air Purifier (zhimi-airpurifier-m1); cannot tell which from here.'},
- {id:'xi2',name:'Xiaomi',ip:'192.168.68.51',kind:'air',x:165,y:410,g:['lan'],guess:1,
-  desc:'Another Xiaomi device (per MAC). See the note at 192.168.68.50.'},
- {id:'iph',name:'iPhone',ip:'192.168.68.56',kind:'phone',x:270,y:410,g:['lan'],
+ {id:'xi2',name:'Xiaomi',ip:'192.168.30.51',kind:'air',x:165,y:410,g:['lan'],guess:1,
+  desc:'Another Xiaomi device (per MAC). See the note at 192.168.30.50.'},
+ {id:'iph',name:'iPhone',ip:'192.168.30.56',kind:'phone',x:270,y:410,g:['lan'],
   desc:'iPhone on the home Wi-Fi (announces as iPhone.local). Away from home it connects over Tailscale.'},
  {id:'priv',name:'4 mobile devices',ip:'.55 · .57 · .62 · .65',kind:'phone',x:375,y:410,g:['lan'],guess:1,
   desc:'Four devices with random (private) MACs, most likely phones, tablets or watches. They do not announce names.'},
- {id:'mac',name:'Home server',ip:'192.168.68.54',kind:'computer',x:560,y:410,g:['lan','ai','ts'],hub:1,
+ {id:'mac',name:'Home server',ip:'192.168.30.54',kind:'computer',x:560,y:410,g:['lan','ai','ts'],hub:1,
   desc:'The center of it all: sits in three networks at once and keeps the Cloudflare tunnel. The assistant and home services run here.',
-  facts:[['Home LAN','192.168.68.54 (1 GbE, Wi-Fi off)'],['Link to the GX10','10.55.0.1'],['Tailscale','100.118.235.98 (vaultwarden-mac-mini)'],
+  facts:[['Home LAN','192.168.30.54 (1 GbE, Wi-Fi off)'],['Link to the GX10','10.0.0.1'],['Tailscale','100.64.0.4 (vaultwarden-mac-mini)'],
          ['Services','assistant bot + panel :9119, Home Assistant :8123, Jellyfin :8096, Vaultwarden :8081, e-invoicing :8787, Transmission :9091'],
          ['Tailscale Serve',':443 Vaultwarden · :10443 assistant panel · :9443 model API · :8443 service :8880']]},
- {id:'gxa',name:'GX10 (primary)',ip:'10.55.0.2',kind:'server',x:740,y:300,g:['ai','lan'],
-  desc:'gx10-d2a2, the primary node. Serves the GLM-5.3-Flash model at 10.55.0.2:8888.',
-  facts:[['Do Maca','10.55.0.2 (direct cable)'],['Do drugiego GX10','10.200.0.1 i 10.200.1.1 (RoCE)'],['Wi-Fi','192.168.68.63'],['Kontener','glm53-flash-tf']]},
+ {id:'gxa',name:'GX10 (primary)',ip:'10.0.0.2',kind:'server',x:740,y:300,g:['ai','lan'],
+  desc:'gx10-d2a2, the primary node. Serves the GLM-5.3-Flash model at 10.0.0.2:8888.',
+  facts:[['Do Maca','10.0.0.2 (direct cable)'],['Do drugiego GX10','10.200.0.1 i 10.200.1.1 (RoCE)'],['Wi-Fi','192.168.30.63'],['Kontener','glm53-flash-tf']]},
  {id:'gxb',name:'GX10 (second)',ip:'10.200.0.2',kind:'server',x:900,y:300,g:['ai','lan'],
   desc:'gx10-cd92, the second node. The model is sharded across both machines over two RoCE links.',
-  facts:[['To the primary GX10','10.200.0.2 i 10.200.1.2 (RoCE)'],['Wi-Fi','192.168.68.59'],['Access SSH','via the primary GX10 (ProxyJump)']]},
- {id:'tsi',name:'iphone171',ip:'100.68.42.76',kind:'phone',x:250,y:570,g:['ts'],
+  facts:[['To the primary GX10','10.200.0.2 i 10.200.1.2 (RoCE)'],['Wi-Fi','192.168.30.59'],['Access SSH','via the primary GX10 (ProxyJump)']]},
+ {id:'tsi',name:'iphone171',ip:'100.64.0.1',kind:'phone',x:250,y:570,g:['ts'],
   desc:'iPhone in the tailnet. The assistant panel and Vaultwarden open from here, even outside home.'},
- {id:'hp',name:'hp-t630',ip:'100.93.180.2',kind:'computer',x:545,y:570,g:['ts','zte'],
-  desc:'A Windows box (HP t630) in the second location, acting as the Tailscale subnet router: it advertises 192.168.0.0/24 so the server sees devices behind the ZTE router, printer included.',
-  facts:[['Tailscale','100.93.180.2'],['ZTE net','192.168.0.2'],['Access','SSH via the server']]},
- {id:'zte',name:'Router ZTE',ip:'192.168.0.1',kind:'router',x:330,y:694,g:['zte'],
+ {id:'hp',name:'hp-t630',ip:'100.64.0.2',kind:'computer',x:545,y:570,g:['ts','zte'],
+  desc:'A Windows box (HP t630) in the second location, acting as the Tailscale subnet router: it advertises 192.168.8.0/24 so the server sees devices behind the ZTE router, printer included.',
+  facts:[['Tailscale','100.64.0.2'],['ZTE net','192.168.8.2'],['Access','SSH via the server']]},
+ {id:'zte',name:'Router ZTE',ip:'192.168.8.1',kind:'router',x:330,y:694,g:['zte'],
   desc:'Router of the second network. Responds to ping from the server via Tailscale.'},
- {id:'qidi',name:'QIDI X-Plus 5',ip:'192.168.0.4',kind:'printer',x:760,y:694,g:['zte'],
+ {id:'qidi',name:'QIDI X-Plus 5',ip:'192.168.8.4',kind:'printer',x:760,y:694,g:['zte'],
   desc:'A 3D printer. The server sends files and starts prints over Moonraker; the whole path runs through the Tailscale tunnel to hp-t630 and the ZTE network.',
-  facts:[['Moonraker','192.168.0.4:7125']]},
- {id:'mmw',name:'mac-mini-work',ip:'100.76.65.3',kind:'computer',x:840,y:570,g:['ts'],
+  facts:[['Moonraker','192.168.8.4:7125']]},
+ {id:'mmw',name:'mac-mini-work',ip:'100.64.0.3',kind:'computer',x:840,y:570,g:['ts'],
   desc:'A second Mac mini (work) in the tailnet.'}
 ];
 const TS='https://vaultwarden-mac-mini.tail84733f.ts.net';
@@ -310,13 +310,13 @@ const SVC=[
  {id:'s-jf',name:'Jellyfin',port:8096,ex:'inet',url:'https://media.example.com',desc:'Media library with a public address via Cloudflare.'},
  {id:'s-ksef',name:'E-invoicing',port:8787,ex:'inet',url:'https://invoices.example.com',desc:'Serwis faktur of publicznym adresem przez Cloudflare.'},
  {id:'s-cloud',name:'Cloud (Docker)',port:8080,ex:'inet',url:'https://apps.example.com',desc:'A Docker service on port 8080, publicly as apps.example.com.'},
- {id:'s-tr',name:'Transmission',port:9091,ex:'home',url:'http://192.168.68.54:9091',desc:'Torrent client. The panel listens on all interfaces, so it is reachable from the home LAN.'},
+ {id:'s-tr',name:'Transmission',port:9091,ex:'home',url:'http://192.168.30.54:9091',desc:'Torrent client. The panel listens on all interfaces, so it is reachable from the home LAN.'},
  {id:'s-cf',name:'Tunel Cloudflare',port:null,ex:'inet',desc:'The cloudflared process keeping the outbound tunnel to Cloudflare and serving four public hostnames.'}
 ];
 const EXN={inet:'z internetu',tail:'tylko tailnet',home:'home LAN'};
 SVC.forEach(s=>N.push({id:s.id,name:s.name,ip:s.port?'port '+s.port:'proces',kind:'svc',g:['svc'],svc:1,x:0,y:0,desc:s.desc,url:s.url,facts:[['Runs on','the server'],['Access',EXN[s.ex]]]}));
 const SVCALL=SVC.concat([{id:'s-glm',name:'GLM model (on GX10)',port:8888,ex:'tail',node:'gxa'}]);
-const URLS={router:'http://192.168.68.1',lex:'http://192.168.68.58',zte:'http://192.168.0.1',qidi:'http://192.168.0.4'};
+const URLS={router:'http://192.168.30.1',lex:'http://192.168.30.58',zte:'http://192.168.8.1',qidi:'http://192.168.8.4'};
 N.forEach(n=>{n.name0=n.name;if(URLS[n.id])n.url=URLS[n.id]});
 const EXPO=[
  {id:'inet',name:'Widoczne of internetu',nodes:['cf','net','router','mac','s-ha','s-jf','s-ksef','s-cloud','s-cf'],links:[['net','cf'],['net','router'],['router','mac']],
@@ -339,14 +339,14 @@ const L=[
  ['router','xi1','lan'],['router','xi2','lan'],['router','iph','lan'],['router','priv','lan'],
  ['router','mac','lan','1 Gb/s'],
  ['router','gxa','lan','Wi-Fi',[560,150]],['router','gxb','lan','',[640,120]],
- ['mac','gxa','direct','10.55.0.0/30'],
+ ['mac','gxa','direct','10.0.0.0/30'],
  ['gxa','gxb','roce','RoCE',[820,262]],['gxa','gxb','roce','',[820,338]],
  ['mac','tsi','ts'],['mac','hp','ts'],['mac','mmw','ts'],
  ['hp','zte','zte'],['zte','qidi','zte']
 ];
 const FLOWS=[
  {id:'tg',name:'Telegram → assistant → LLM',path:['net','router','mac','gxa','gxb'],
-  steps:['A Telegram message arrives from the internet via the router to the server.','The assistant on the server queries the model over the direct link (10.55.0.2:8888).','Both GX10 nodes answer together over the RoCE links.']},
+  steps:['A Telegram message arrives from the internet via the router to the server.','The assistant on the server queries the model over the direct link (10.0.0.2:8888).','Both GX10 nodes answer together over the RoCE links.']},
  {id:'ip',name:'iPhone → assistant panel',path:['tsi','mac'],
   steps:['The iPhone connects over an encrypted Tailscale tunnel to server.tailnet…:10443.','Tailscale Serve on the server forwards the traffic to the assistant panel at 127.0.0.1:9119.','Model zostaje na GX10; telefon rozmawia tylko of Makiem.']},
  {id:'fk',name:'invoices.example.com',path:['cf','net','router','mac'],
@@ -354,7 +354,7 @@ const FLOWS=[
  {id:'ep',name:'LLM outage → fallback',path:['mac','router','net','api'],
   steps:['A watchdog checks the model on the GX10 every 30 min and alerts when it is down.','You then write to the fallback bot running on the server.','The fallback asks the cloud API, so this data leaves the house.']},
  {id:'qd',name:'Print job → QIDI',path:['mac','hp','zte','qidi'],
-  steps:['The server sends the .gcode.3mf file to 192.168.0.4:7125.','The route to 192.168.0.0/24 goes over Tailscale to hp-t630 sitting in the ZTE network.','hp-t630 forwards the traffic through the ZTE router to the printer; Moonraker starts the print.']},
+  steps:['The server sends the .gcode.3mf file to 192.168.8.4:7125.','The route to 192.168.8.0/24 goes over Tailscale to hp-t630 sitting in the ZTE network.','hp-t630 forwards the traffic through the ZTE router to the printer; Moonraker starts the print.']},
  {id:'ha',name:'Home Assistant → Hue',path:['mac','router','hue'],
   steps:['Home Assistant runs on the server (:8123).','The command goes through the router to the Hue bridge on the home LAN.','The bridge drives the bulbs over its own radio (Zigbee).']}
 ];
@@ -798,7 +798,7 @@ const idx=$('idx');
 function buildIndex(){
   idx.replaceChildren();
   Object.entries(NETS).forEach(([k,v])=>{const s=h('section');const t=h('h3');const d=h('span',{class:'dot'});d.style.background=v.col;t.append(d,v.name);s.append(t);
-    N.filter(n=>n.g.includes(k)).forEach(n=>{const b=h('button',{type:'button'});b.append(h('span',{},n.name),h('span',{},k==='ts'&&n.id==='mac'?'100.118.235.98':k==='lan'&&n.id==='gxa'?'192.168.68.63':k==='lan'&&n.id==='gxb'?'192.168.68.59':k==='ai'&&n.id==='mac'?'10.55.0.1':k==='zte'&&n.id==='hp'?'192.168.0.2':n.ip));
+    N.filter(n=>n.g.includes(k)).forEach(n=>{const b=h('button',{type:'button'});b.append(h('span',{},n.name),h('span',{},k==='ts'&&n.id==='mac'?'100.64.0.4':k==='lan'&&n.id==='gxa'?'192.168.30.63':k==='lan'&&n.id==='gxb'?'192.168.30.59':k==='ai'&&n.id==='mac'?'10.0.0.1':k==='zte'&&n.id==='hp'?'192.168.8.2':n.ip));
       b.onclick=()=>{go(n.id);document.querySelector('.stagecol').scrollIntoView({behavior:'smooth',block:'nearest'})};s.append(b)});
     idx.append(s)});
 }
