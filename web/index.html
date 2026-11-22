@@ -603,10 +603,11 @@ async function loadLive(){
   try{
     const r=await fetch('status.json',{cache:'no-store'}); if(!r.ok)throw 0;
     const j=await r.json(); if(!j||!j.devices)throw 0; LIVE=j;
-    if(!liveMode){liveMode=true;setInterval(loadLive,30000);
+    if(!liveMode){liveMode=true;setInterval(()=>{if(!document.hidden)loadLive()},60000);
+      if(refBtn)refBtn.hidden=false;
       try{const n=await fetch('notes.json',{cache:'no-store'});if(n.ok){NOTES=await n.json()||{};applyNotes()}}catch(e){}
-      try{const es=new EventSource('stream');es.addEventListener('refresh',()=>loadLive());
-        es.addEventListener('error',()=>{try{es.close()}catch(e){}})}catch(e){}}
+      try{const es=new EventSource('stream');es.addEventListener('refresh',()=>loadLive())}catch(e){}}
+    if(refBtn&&refBtn.disabled&&j.ts>refTs){refBtn.disabled=false;refBtn.textContent='Refresh'}
   }catch(e){if(!liveMode)return}
   rttBtn.hidden=!LIVE;
   applyStates(); loadHist().then(()=>{renderOutages();if(sel&&fsTip&&fsTip.classList.contains('on'))updateFsTip()});
@@ -956,28 +957,47 @@ function init3d(){
   };
 }
 // ---------- loop + views ----------
-let last=0, t=0;
+let last=0, t=0, rafId=0, v3Tried=false, refTs=0;
 function place(){links.forEach(l=>l.pk.forEach(p=>{let u=(t*l.speed/l.len+p.off)%1;if(p.dir<0)u=1-u;const pt=l.path.getPointAtLength(u*l.len);p.e.setAttribute('cx',pt.x);p.e.setAttribute('cy',pt.y)}))}
 function tick(ts){
+  rafId=0;
+  if(document.hidden){last=0;return}
   const dt=last?Math.min(.05,(ts-last)/1000):0; last=ts;
   if(playing){t+=dt; if(view==='2d')place(); if(flow){flowT=(flowT+dt*190)%(flow.total+120);placeRunner(Math.min(flowT,flow.total))}}
   if(V3&&view==='3d')V3.frame(dt,t,playing);
-  requestAnimationFrame(tick);
+  rafId=requestAnimationFrame(tick);
 }
+function startTick(){if(!rafId&&!document.hidden)rafId=requestAnimationFrame(tick)}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){last=0;startTick();if(liveMode)loadLive()}});
 showOverview(); place();
-try{V3=init3d()}catch(e){V3=null}
 paint();
 const vb=document.getElementById('views'), s3=document.getElementById('stage3d'), s2=document.getElementById('stage2d');
+function ensure3d(){
+  if(V3||v3Tried)return V3;
+  v3Tried=true;
+  try{V3=init3d()}catch(e){V3=null}
+  if(V3){
+    const cb=document.getElementById('cams');
+    if(cb&&!cb.childElementCount)[['all','Overview'],['top','Top down'],['mac','Home server'],['ai','AI cluster'],['zte','ZTE network'],['net','Internet']].forEach(([k,n])=>{const b=h('button',{type:'button',id:'cam-'+k},n);b.onclick=()=>V3.view(k);cb.append(b)});
+    applyNotes();applyStates();paint();if(showRtt){V3.rtt(true);applyLinks()}
+  }else{
+    vb.querySelectorAll('button[data-v]').forEach(b=>{b.hidden=true});
+  }
+  return V3;
+}
 function setView(v){
-  if(v==='3d'&&!V3)v='2d'; view=v; s3.hidden=v!=='3d'; s2.hidden=v!=='2d';
-  vb.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
+  if(v==='3d'&&!ensure3d())v='2d'; view=v; s3.hidden=v!=='3d'; s2.hidden=v!=='2d';
+  vb.querySelectorAll('button[data-v]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));
   if(v==='2d'){place();if(flow)placeRunner(Math.min(flowT,flow.total))} else V3.resize();
   const pb2=document.getElementById('png');if(pb2)pb2.hidden=v!=='3d';
 }
 [['3d','3D'],['2d','2D schematic']].forEach(([k,n])=>{const b=h('button',{class:'chip',type:'button','aria-pressed':'false',id:'view-'+k},n);b.dataset.v=k;b.onclick=()=>{location.hash=k;setView(k)};vb.append(b)});
-vb.querySelectorAll('button').forEach(b=>{b.hidden=!V3});
-if(V3){const cb=document.getElementById('cams');[['all','Overview'],['top','Top down'],['mac','Home server'],['ai','AI cluster'],['zte','ZTE network'],['net','Internet']].forEach(([k,n])=>{const b=h('button',{type:'button',id:'cam-'+k},n);b.onclick=()=>V3.view(k);cb.append(b)})}
 vb.append(q);
+const refBtn=h('button',{class:'chip',type:'button',id:'refbtn',hidden:true,title:'Trigger an immediate network scan'},'Refresh');
+refBtn.onclick=async()=>{refBtn.disabled=true;refBtn.textContent='Refreshing…';refTs=(LIVE&&LIVE.ts)||0;
+  try{await fetch('refresh',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'netglass'},body:'{}'})}catch(e){}
+  setTimeout(()=>{if(refBtn.disabled){refBtn.disabled=false;refBtn.textContent='Refresh';loadLive()}},16000)};
+vb.append(refBtn);
 const fsTarget=document.querySelector('.stagecol');
 const fsBtn=h('button',{class:'chip',type:'button',id:'fs','aria-pressed':'false'},'Fullscreen map');
 const pngBtn=h('button',{class:'chip',type:'button',id:'png',title:'Save widok 3D mapy jako obraz PNG'},'PNG snapshot');
@@ -1062,7 +1082,7 @@ const fromHash=()=>setView(location.hash==='#2d'?'2d':'3d');
 addEventListener('hashchange',fromHash); fromHash();
 if(reduced){playing=false;pb.textContent='Resume motion';pb.setAttribute('aria-pressed','true')}
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)&&location.hostname!=='localhost')navigator.serviceWorker.register('sw.js').catch(()=>{});
-requestAnimationFrame(tick);
+startTick();
 </script>
 </body>
 </html>

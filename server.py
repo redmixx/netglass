@@ -46,6 +46,9 @@ NOTE_KEYS = {"name", "note", "conn"}
 lock = threading.Lock()
 _cache_lock = threading.Lock()
 _cfg_lock = threading.Lock()
+_status_cond = threading.Condition()
+_status_ver = 0
+_last_manual_refresh = 0.0
 VENDORS, _ha_cache = {}, {"mtime": None, "data": {}}
 
 def load(name, default):
@@ -373,7 +376,7 @@ def label_of(key):
     return LABELS.get(key, key)
 
 def send_wol(mac):
-    pkt = bytes.fromhex(mac.replace(":", "")) * 16
+    pkt = b"\xff" * 6 + bytes.fromhex(mac.replace(":", "")) * 16
     ok = False
     for addr in WOL_BROADCASTS:
         try:
@@ -386,8 +389,29 @@ def send_wol(mac):
             pass
     return ok
 
+def scan_lan(lan_ips):
+    """Fast single-process LAN sweep via fping when available, with parallel ping fallback."""
+    if not lan_ips:
+        return {}
+    fping = shutil.which("fping") if sys.platform != "win32" else None
+    if fping:
+        try:
+            r = subprocess.run([fping, "-a", "-e", "-r", "0", "-t", "700", "-i", "5"],
+                               input="\n".join(lan_ips) + "\n", capture_output=True, text=True, timeout=20)
+            if r.returncode in (0, 1):
+                found = {ip: None for ip in lan_ips}
+                for m in re.finditer(r"^(\d+\.\d+\.\d+\.\d+)\s+\(([\d.]+)\s*ms\)", r.stdout, re.MULTILINE):
+                    if m.group(1) in found:
+                        found[m.group(1)] = float(m.group(2))
+                return found
+        except Exception:
+            pass
+    with ThreadPoolExecutor(max_workers=64) as pool:
+        return dict(zip(lan_ips, pool.map(ping, lan_ips)))
+
 # ---------- collector ----------
 def collect():
+    global _status_ver
     now = int(time.time())
     state = load("state.json", {})
     seen, first, down = state.setdefault("seen", {}), state.setdefault("first", {}), state.setdefault("down", {})
@@ -400,12 +424,13 @@ def collect():
     if not VENDORS:
         load_vendors()
     lan_ips = lan_hosts()
-    with ThreadPoolExecutor(max_workers=64) as pool:
-        lan_rtt = dict(zip(lan_ips, pool.map(ping, lan_ips)))
+    lan_rtt = scan_lan(lan_ips)
+    with ThreadPoolExecutor(max_workers=16) as pool:
         extra_rtt = dict(zip(PING_TARGETS, pool.map(ping, PING_TARGETS.values())))
         arp = arp_table()
         retry = [ip for ip, mac in arp.items() if lan_rtt.get(ip) is None and mac_map.get(mac)]
-        lan_rtt.update(zip(retry, pool.map(lambda ip: ping(ip, 1500), retry)))
+        if retry:
+            lan_rtt.update(zip(retry, pool.map(lambda ip: ping(ip, 1500), retry)))
     check = lambda s: tcp(s[1], s[2]) or tcp(s[1], s[2], 6)  # noqa: E731
     with ThreadPoolExecutor(max_workers=16) as pool:
         f_svc = {s[0]: pool.submit(check, s) for s in TCP_SERVICES}
@@ -501,6 +526,9 @@ def collect():
     state["booted"] = True
     save("state.json", state)
     save("status.json", status)
+    with _status_cond:
+        _status_ver += 1
+        _status_cond.notify_all()
     return status
 
 def collector_loop():
@@ -550,20 +578,21 @@ def stream_events(handler):
     handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")
     handler.end_headers()
-    last = 0
+    with _status_cond:
+        last = _status_ver
     try:
+        handler.wfile.write(b": connected\n\n")
+        handler.wfile.flush()
         while True:
-            try:
-                m = os.path.getmtime(DATA("status.json"))
-            except OSError:
-                m = 0
-            if m != last:
-                last = m
+            with _status_cond:
+                changed = _status_cond.wait_for(lambda: _status_ver != last, timeout=25)
+                cur = _status_ver
+            if changed:
+                last = cur
                 handler.wfile.write(b"event: refresh\ndata: 1\n\n")
             else:
                 handler.wfile.write(b": ping\n\n")
             handler.wfile.flush()
-            time.sleep(4)
     except (BrokenPipeError, ConnectionResetError, OSError):
         pass
 
@@ -655,6 +684,15 @@ class Handler(BaseHTTPRequestHandler):
                 mac = id_mac.get(did)
                 if not mac or not send_wol(mac):
                     raise ValueError("wol")
+            elif self.path == "/refresh":
+                global _last_manual_refresh
+                now = time.time()
+                with _cfg_lock:
+                    if now - _last_manual_refresh < 15:
+                        return self.send(200, b'{"ok":true,"started":false}', "application/json")
+                    _last_manual_refresh = now
+                threading.Thread(target=refresh_now, daemon=True).start()
+                return self.send(200, b'{"ok":true,"started":true}', "application/json")
             else:
                 return self.send(404, b"not found", "text/plain")
             self.send(200, b'{"ok":true}', "application/json")
