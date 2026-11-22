@@ -44,6 +44,8 @@ HINTS = [("somfy", "maybe a somfy hub"), ("overkiz", "maybe an Overkiz hub"), ("
          ("espressif", "ESP-based IoT device"), ("apple", "Apple device"), ("samsung", "Samsung device")]
 NOTE_KEYS = {"name", "note", "conn"}
 lock = threading.Lock()
+_cache_lock = threading.Lock()
+_cfg_lock = threading.Lock()
 VENDORS, _ha_cache = {}, {"mtime": None, "data": {}}
 
 def load(name, default):
@@ -54,7 +56,7 @@ def load(name, default):
         return default
 
 def save(name, data):
-    tmp = DATA(name + ".tmp")
+    tmp = DATA("%s.%d.tmp" % (name, threading.get_ident()))
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=1)
     os.replace(tmp, DATA(name))
@@ -81,19 +83,20 @@ def vendor_of(mac):
 def ha_names():
     if not HA_REGISTRY:
         return {}
-    try:
-        mtime = os.path.getmtime(HA_REGISTRY)
-        if mtime != _ha_cache["mtime"]:
-            data = {}
-            with open(HA_REGISTRY, encoding="utf-8") as fh:
-                for d in json.load(fh)["data"]["devices"]:
-                    for kind, val in d.get("connections", []):
-                        if kind == "mac" and len(val) == 17:
-                            data[val.lower()] = " ".join(x for x in (d.get("manufacturer"), d.get("name_by_user") or d.get("name")) if x)
-            _ha_cache.update(mtime=mtime, data=data)
-    except Exception:
-        pass
-    return _ha_cache["data"]
+    with _cache_lock:
+        try:
+            mtime = os.path.getmtime(HA_REGISTRY)
+            if mtime != _ha_cache["mtime"]:
+                data = {}
+                with open(HA_REGISTRY, encoding="utf-8") as fh:
+                    for d in json.load(fh)["data"]["devices"]:
+                        for kind, val in d.get("connections", []):
+                            if kind == "mac" and len(val) == 17:
+                                data[val.lower()] = " ".join(x for x in (d.get("manufacturer"), d.get("name_by_user") or d.get("name")) if x)
+                _ha_cache.update(mtime=mtime, data=data)
+        except Exception:
+            pass
+        return _ha_cache["data"]
 
 def _ping_cmd(ip, wait_ms):
     if sys.platform == "win32":
@@ -309,9 +312,10 @@ def summarize(now=None):
 _hist_cache = {"t": 0.0, "v": None}
 
 def history_cached():
-    if time.time() - _hist_cache["t"] > 30 or _hist_cache["v"] is None:
-        _hist_cache.update(t=time.time(), v=summarize())
-    return _hist_cache["v"]
+    with _cache_lock:
+        if time.time() - _hist_cache["t"] > 30 or _hist_cache["v"] is None:
+            _hist_cache.update(t=time.time(), v=summarize())
+        return _hist_cache["v"]
 
 def state_at(hours):
     target = time.time() - max(0.25, hours) * 3600
@@ -327,8 +331,9 @@ def state_at(hours):
 def _desktop_notify(msg):
     try:
         if sys.platform == "darwin":
-            subprocess.run(["osascript", "-e",
-                            'display notification "%s" with title "netglass" sound name "Ping"' % msg],
+            subprocess.run(["osascript", "-e", "on run {m}",
+                            "-e", 'display notification m with title "netglass" sound name "Ping"',
+                            "-e", "end run", "--", str(msg)],
                            timeout=10, check=False)
         elif sys.platform == "win32":
             scr = ("Add-Type -AssemblyName System.Windows.Forms;"
@@ -493,8 +498,8 @@ def collect():
     services = {k: {"up": bool(v), **({"down_since": down[k]} if k in down else {})} for k, v in svc.items()}
     status = {"ts": now, "interval": INTERVAL_S, "devices": {i: dev(i) for i in DEVICE_IDS}, "services": services,
               "links": links, "printer": printer, "unknown": unknown}
-    save("state.json", state)
     state["booted"] = True
+    save("state.json", state)
     save("status.json", status)
     return status
 
@@ -517,9 +522,6 @@ def refresh_now():
         print("refresh failed:", repr(exc), flush=True)
 
 # ---------- http ----------
-SKELETON = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
-            '<style>body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style></head><body>')
 VENDOR_JS = {
     "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js": "vendor/three.min.js",
     "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js": "vendor/OrbitControls.js",
@@ -568,7 +570,9 @@ def stream_events(handler):
 class Handler(BaseHTTPRequestHandler):
     def send(self, code, body, ctype):
         self.send_response(code)
-        self.send_header("Content-Type", ctype + "; charset=utf-8")
+        if ctype.startswith("text/") or "json" in ctype:
+            ctype = ctype + "; charset=utf-8"
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -582,7 +586,7 @@ class Handler(BaseHTTPRequestHandler):
             for url, local in VENDOR_JS.items():
                 if os.path.exists(os.path.join(HERE, "web", local)):
                     page = page.replace(url, local)
-            return self.send(200, (SKELETON + page + "</body></html>").encode("utf-8"), "text/html")
+            return self.send(200, page.encode("utf-8"), "text/html")
         if path == "/history.json":
             return self.send(200, json.dumps(history_cached(), ensure_ascii=False).encode("utf-8"), "application/json")
         if path == "/at":
@@ -615,6 +619,9 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(size).decode("utf-8"))
 
     def do_POST(self):
+        ctype = (self.headers.get("Content-Type") or "").lower()
+        if self.headers.get("X-Requested-With") != "netglass" or "application/json" not in ctype:
+            return self.send(403, b'{"ok":false,"error":"csrf"}', "application/json")
         try:
             data = self.body_json()
             if self.path == "/notes":
@@ -623,22 +630,25 @@ class Handler(BaseHTTPRequestHandler):
                     if not re.fullmatch(r"[a-z0-9-]{1,24}", dev) or not isinstance(note, dict):
                         raise ValueError("key")
                     clean[dev] = {k: str(v)[:200] for k, v in note.items() if k in NOTE_KEYS and str(v).strip()}
-                save("notes.json", {k: v for k, v in clean.items() if v})
+                with _cfg_lock:
+                    save("notes.json", {k: v for k, v in clean.items() if v})
             elif self.path == "/assign":
                 mac, did = str(data.get("mac", "")).lower(), str(data.get("id", ""))
                 if not re.fullmatch(r"([0-9a-f]{2}:){5}[0-9a-f]{2}", mac) or (did and did not in DEVICE_IDS):
                     raise ValueError("assign")
-                m = load("assignments.json", {})
-                if did:
-                    m[mac] = did
-                else:
-                    m.pop(mac, None)
-                save("assignments.json", m)
+                with _cfg_lock:
+                    m = load("assignments.json", {})
+                    if did:
+                        m[mac] = did
+                    else:
+                        m.pop(mac, None)
+                    save("assignments.json", m)
                 threading.Thread(target=refresh_now, daemon=True).start()
             elif self.path == "/wol":
                 did = str(data.get("id", ""))
                 mm = dict(KNOWN_MAC)
-                mm.update(load("assignments.json", {}))
+                with _cfg_lock:
+                    mm.update(load("assignments.json", {}))
                 id_mac = {}
                 for m, i in mm.items():
                     id_mac.setdefault(i, m)
@@ -648,7 +658,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 return self.send(404, b"not found", "text/plain")
             self.send(200, b'{"ok":true}', "application/json")
-        except Exception:
+        except Exception as exc:
+            print("post failed:", self.path, repr(exc), flush=True)
             self.send(400, b'{"ok":false}', "application/json")
 
     def log_message(self, *args):

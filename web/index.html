@@ -1,3 +1,8 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>My network map</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#08090a">
@@ -7,6 +12,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
+body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}
 /* Layout: one topology canvas with four network zones, a detail panel beside it (below on phones), device index underneath. */
 :root{
   --bg:#f6f7f9; --surface:#ffffff; --zone:#eef1f5; --line:#e4e8ee; --fg:#191d24; --muted:#6b7684;
@@ -190,8 +196,9 @@ dd{color:color-mix(in srgb,var(--fg) 86%,transparent)}
 input#q{background:color-mix(in srgb,var(--fg) 3%,transparent);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:500 .85rem var(--f-body);color:var(--fg);transition:border-color .15s ease,box-shadow .15s ease}
 input#q:focus{outline:none;border-color:color-mix(in srgb,var(--ts) 55%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--ts) 18%,transparent)}
 </style>
-
 <script>(function(){try{var t=localStorage.getItem('mapa-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}})()</script>
+</head>
+<body>
 <div class="wrap">
   <header>
     <h1>My network map</h1>
@@ -497,7 +504,7 @@ function renderNode(n){
   const eb=h('button',{class:'chip',type:'button',id:'edit-btn'},'Name & note'); eb.onclick=()=>editForm(n,acts); acts.append(eb);
   if(DV&&DV.mac&&!DV.up){const wb=h('button',{class:'chip',type:'button',id:'wol'},'Wake (WoL)');
     wb.onclick=async()=>{wb.disabled=true;wb.textContent='Sending magic…';
-      try{const r=await fetch('wol',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:n.id})});wb.textContent=r.ok?'Sent ✓ (give it a moment)':'Send error'}
+      try{const r=await fetch('wol',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'netglass'},body:JSON.stringify({id:n.id})});wb.textContent=r.ok?'Sent ✓ (give it a moment)':'Send error'}
       catch(e){wb.textContent='Send error'}};
     acts.append(wb)}
   panel.append(acts);
@@ -528,7 +535,7 @@ function editForm(n,slot){
 function saveNotes(){
   const body=JSON.stringify(NOTES);
   try{localStorage.setItem('mapa-notatki',body)}catch(e){}
-  if(liveMode)fetch('notes',{method:'POST',headers:{'Content-Type':'application/json'},body}).catch(()=>{});
+  if(liveMode)fetch('notes',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'netglass'},body}).catch(()=>{});
 }
 function applyNotes(){
   N.forEach(n=>{n.name=(NOTES[n.id]&&NOTES[n.id].name)||n.name0});
@@ -586,7 +593,7 @@ function renderNew(){
       N.filter(n=>ASSIGN.includes(n.id)).forEach(n=>sl.append(h('option',{value:n.id},n.name+' ('+n.ip+')')));
       const bt=h('button',{class:'chip',type:'button',id:'asb-'+i},'Save');
       bt.onclick=async()=>{if(!sl.value)return;bt.textContent='Saving…';
-        try{await fetch('assign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mac:u.mac,id:sl.value})})}catch(e){}
+        try{await fetch('assign',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'netglass'},body:JSON.stringify({mac:u.mac,id:sl.value})})}catch(e){}
         newSig=''; setTimeout(loadLive,9000); bt.textContent='Saved, refreshing…'};
       r.append(sl,bt);
     }
@@ -1034,7 +1041,7 @@ function updateFsTip(){
   if(d&&d.mac&&!d.up&&!d.never){ // WoL prosto of chmurki
     const wb=h('button',{class:'chip',type:'button',id:'fs-wol'},'Wake (WoL)');
     wb.onclick=async()=>{wb.disabled=true;wb.textContent='Sending magic…';
-      try{const r=await fetch('wol',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:n.id})});wb.textContent=r.ok?'Sent ✓':'Error'}catch(e){wb.textContent='Error'}};
+      try{const r=await fetch('wol',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'netglass'},body:JSON.stringify({id:n.id})});wb.textContent=r.ok?'Sent ✓':'Error'}catch(e){wb.textContent='Error'}};
     fsTip.append(wb);
   }
   fsTip.append(fsTipX);
@@ -1057,3 +1064,5 @@ if(reduced){playing=false;pb.textContent='Resume motion';pb.setAttribute('aria-p
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)&&location.hostname!=='localhost')navigator.serviceWorker.register('sw.js').catch(()=>{});
 requestAnimationFrame(tick);
 </script>
+</body>
+</html>
